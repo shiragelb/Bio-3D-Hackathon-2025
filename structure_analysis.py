@@ -57,7 +57,6 @@ def com_distance(com_1, com_2):
 
 if __name__ == "__main__":
 
-
     ref_pdb_path = "structures/6cit.pdb"
     ref_peptide_chain_id = "D"
     positives_dir = "structures/af_positives"
@@ -72,7 +71,8 @@ if __name__ == "__main__":
     # Get positives and negatives distances
     dists, plddts, labels = [], [], []
     for cls, folder in ((1, positives_dir), (0, negatives_dir)):
-        pdb_models = [os.path.join(folder, pdb) for pdb in os.listdir(folder) if pdb.endswith(".pdb") or pdb.endswith(".cif")]
+        pdb_models = [os.path.join(folder, pdb) for pdb in os.listdir(folder) if
+                      pdb.endswith(".pdb") or pdb.endswith(".cif")]
         for model in tqdm(pdb_models):
             # Get peptide atoms
             model_struct = load_structure(model)
@@ -84,7 +84,8 @@ if __name__ == "__main__":
 
             # Get peptide center of mass distance from the reference center of mass
             model_com = centre_of_mass(model_pep_atoms)
-            dists.append(None)  # TODO: fill this line
+            # dists.append(None)  # TODO: fill this line
+            dists.append(com_distance(model_com, ref_com))
 
             labels.append(cls)
 
@@ -95,5 +96,7 @@ if __name__ == "__main__":
     plot_roc_curve(labels, dists, out_file_path="com_roc_curve.png")
     plot_roc_curve(labels, plddts, out_file_path="plddt_roc_curve.png")
 
-    plot_boxplot({"Positive Test": dists[labels == 1], "Negative Test": dists[labels == 0]}, out_file_path="com_boxplot.png")
-    plot_boxplot({"Positive Test": plddts[labels == 1], "Negative Test": plddts[labels == 0]}, out_file_path="plddt_boxplot.png")
+    plot_boxplot({"Positive Test": dists[labels == 1], "Negative Test": dists[labels == 0]},
+                 out_file_path="com_boxplot.png")
+    plot_boxplot({"Positive Test": plddts[labels == 1], "Negative Test": plddts[labels == 0]},
+                 out_file_path="plddt_boxplot.png")

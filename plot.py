@@ -21,6 +21,7 @@ def plot_esm_amino_acids_embeddings(amino_acids_embeddings, out_file_path="heatm
 
     # Display plot
     plt.savefig(out_file_path)
+    plt.close()
 
 def plot_boxplot(data_dict, out_file_path="boxplot.png"):
     """
@@ -46,6 +47,7 @@ def plot_boxplot(data_dict, out_file_path="boxplot.png"):
     # Display plot
     plt.grid(True)
     plt.savefig(out_file_path)
+    plt.close()
 
 
 def plot_roc_curve(y_test, y_scores, out_file_path="roc_curve.png"):
@@ -72,6 +74,9 @@ def plot_roc_curve(y_test, y_scores, out_file_path="roc_curve.png"):
     plt.legend(loc="lower right")
     plt.grid(True)
     plt.savefig(out_file_path)
+    plt.close()
+
+    return roc_auc
 
 
 def plot_2dim_reduction(lower_dim_coords, labels, out_file_path):
@@ -101,3 +106,4 @@ def plot_2dim_reduction(lower_dim_coords, labels, out_file_path):
     plt.tight_layout()
 
     plt.savefig(out_file_path)
+    plt.close()
