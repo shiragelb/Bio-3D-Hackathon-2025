@@ -1,57 +1,89 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
 from sklearn.metrics import roc_curve, auc
+import ast
 
 
-def plot_score_distribution(scores_dict, output_path="score_distribution.png"):
+def preprocess_pipeline_output(df):
     """
-    Plots histograms of the score distributions for different groups.
-    This helps visualize how well the model separates different datasets.
+    Takes the raw DataFrame from the pipeline and processes it for plotting.
+    - Parses the string-formatted 'logits' column.
+    - Converts logits to probabilities using softmax.
+    - Adds a 'positive_probability' column.
 
     Args:
-        scores_dict (dict): A dictionary where keys are group names (e.g., "Human Proteome")
-                            and values are lists of the positive probability scores.
+        df (pd.DataFrame): The DataFrame with columns ['uniprotID', 'logits', 'predictions', 'labels'].
+
+    Returns:
+        pd.DataFrame: The processed DataFrame with an added 'positive_probability' column.
+    """
+    # Safely parse the 'logits' column from string to list of floats
+    # ast.literal_eval is safer than eval()
+    logits_list = df['logits'].apply(ast.literal_eval).tolist()
+    logits_array = np.array(logits_list)
+
+    # Apply softmax to convert logits to probabilities
+    # exp_logits = np.exp(logits_array)
+    # probabilities = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+    # A more numerically stable way to do softmax:
+    exp_logits = np.exp(
+        logits_array - np.max(logits_array, axis=1, keepdims=True))
+    probabilities = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+
+    # Create a new DataFrame with the results
+    processed_df = df.copy()
+    # Assume class 1 is the "positive" class
+    processed_df['positive_probability'] = probabilities[:, 1]
+
+    return processed_df
+
+
+def plot_score_distribution(data_dict, score_column='positive_probability',
+                            output_path="score_distribution.png"):
+    """
+    Plots histograms of the score distributions from one or more processed DataFrames.
+
+    Args:
+        data_dict (dict): A dictionary where keys are group names (e.g., "Positive Labels")
+                          and values are the processed pandas DataFrames.
+        score_column (str): The name of the column containing the scores to plot.
         output_path (str): Path to save the output PNG file.
     """
     plt.figure(figsize=(10, 7))
     sns.set_style("whitegrid")
 
-    for group_name, scores in scores_dict.items():
-        # Use kde=True to show a smoothed density curve over the histogram
-        sns.histplot(scores, bins=50, kde=True,
-                     label=f'{group_name} (n={len(scores)})', stat="density",
+    for group_name, df in data_dict.items():
+        sns.histplot(df[score_column], bins=50, kde=True,
+                     label=f'{group_name} (n={len(df)})', stat="density",
                      common_norm=False)
 
     plt.title('Distribution of Predicted NES Probabilities', fontsize=16)
     plt.xlabel('Predicted Probability of being an NES', fontsize=12)
     plt.ylabel('Density', fontsize=12)
     plt.legend()
-    plt.xlim(0, 1)  # Probabilities are between 0 and 1
+    plt.xlim(0, 1)
     plt.tight_layout()
     plt.savefig(output_path)
     print(f"Saved score distribution plot to {output_path}")
 
 
-def plot_roc_curve(true_positive_scores, true_negative_scores,
-                   output_path="roc_curve.png"):
+def plot_roc_curve(df, score_column='positive_probability',
+                   label_column='labels', output_path="roc_curve.png"):
     """
-    Generates and plots a Receiver Operating Characteristic (ROC) curve.
-    This function requires a set of known positives and known negatives to evaluate
-    the classifier's performance.
+    Generates and plots a ROC curve from a processed DataFrame.
 
     Args:
-        true_positive_scores (list): A list of positive probability scores from a known positive set
-                                     (e.g., the original NesDB positives).
-        true_negative_scores (list): A list of positive probability scores from a known negative set
-                                     (e.g., the mitochondrial proteins).
+        df (pd.DataFrame): Processed DataFrame containing scores and true labels.
+        score_column (str): The name of the column containing the scores.
+        label_column (str): The name of the column containing the true labels (0 or 1).
         output_path (str): Path to save the output PNG file.
     """
     plt.figure(figsize=(8, 8))
 
-    # Combine scores and create true labels
-    y_scores = true_positive_scores + true_negative_scores
-    y_true = [1] * len(true_positive_scores) + [0] * len(true_negative_scores)
+    y_true = df[label_column]
+    y_scores = df[score_column]
 
     fpr, tpr, _ = roc_curve(y_true, y_scores)
     roc_auc = auc(fpr, tpr)
@@ -73,31 +105,24 @@ def plot_roc_curve(true_positive_scores, true_negative_scores,
     print(f"Saved ROC curve to {output_path}")
 
 
-def plot_score_boxplot(scores_dict, output_path="boxplot.png"):
+def plot_score_boxplot(df, group_column='labels',
+                       score_column='positive_probability',
+                       output_path="boxplot.png"):
     """
-    Generates a box plot to compare the statistical summary of score
-    distributions from different groups.
+    Generates a box plot comparing score distributions, grouped by a column.
 
     Args:
-        scores_dict (dict): A dictionary where keys are group names
-                            (e.g., "Human Proteome", "Negative Controls")
-                            and values are lists of positive probability scores.
+        df (pd.DataFrame): Processed DataFrame containing scores and grouping info.
+        group_column (str): Column to group by (e.g., 'labels' or 'source').
+        score_column (str): Column containing the scores.
         output_path (str): Path to save the output PNG file.
     """
-    # Convert the dictionary to a pandas DataFrame for easier plotting with seaborn.
-    # This format is called "long-form" data.
-    plot_data = []
-    for group_name, scores in scores_dict.items():
-        for score in scores:
-            plot_data.append({'Group': group_name, 'Score': score})
-    df = pd.DataFrame(plot_data)
-
     plt.figure(figsize=(8, 8))
-    sns.boxplot(x='Group', y='Score', data=df)
+    sns.boxplot(x=group_column, y=score_column, data=df)
 
     plt.title('Comparison of NES Probability Scores', fontsize=16)
     plt.ylabel('Predicted Probability of being an NES', fontsize=12)
-    plt.xlabel('Data Source', fontsize=12)
+    plt.xlabel('Group', fontsize=12)
     plt.tight_layout()
     plt.savefig(output_path)
     print(f"Saved box plot to {output_path}")
