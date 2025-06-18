@@ -66,7 +66,7 @@ class TransformerClassifier(nn.Module):
             max_len: int,  # The maximum possible NES sequence length
             embedding_dim: int,  # ESM embedding size
             positional_encoding: str = "periodic_modulo",  # "sinusoidal" or "periodic_modulo"
-            periods: tuple = (2, 3, 4),  # Periods for the periodic encoding
+            periods: tuple = None,  # Periods for the periodic encoding
             num_classes: int = 2,
             num_layers: int = 2,
             num_heads: int = 4,
@@ -96,6 +96,8 @@ class TransformerClassifier(nn.Module):
                 d_model=embedding_dim, max_len=max_len + int(add_cls_token)
             )
         elif positional_encoding == "periodic_modulo":
+            if periods is None:
+                raise ValueError("periods must be specified for periodic modulo encodings!")
             self.pos_encoder = PeriodicModuloEncoding(
                 d_model=embedding_dim, max_len=max_len + int(add_cls_token), periods=periods
             )
@@ -151,4 +153,31 @@ class TransformerClassifier(nn.Module):
         else:
             raise ValueError("pooling must be 'cls' or 'mean'")
 
-        return self.classifier(pooled)  # Outputs num_classes logits for each sequence in the batch.
+        return self.classifier(pooled)  # Tensor [batch_size, num_classes]
+
+
+def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
+                               num_layers: int = 2, num_heads: int = 4, dropout: float = 0.2,
+                               positional_encoding: str = "SinusoidalPositionalEncoding", ) -> TransformerClassifier:
+    """
+    Creates a Transformer classifier for NES classification.
+    :return: An instance of TransformerClassifier.
+    """
+    if positional_encoding == "SinusoidalPositionalEncoding":
+        periods = None  # No periods needed for sinusoidal encoding
+    else:
+        periods = (2, 3, 4)
+
+    return TransformerClassifier(
+        max_len=max_seq_len,  # Maximum length of NES sequences
+        embedding_dim=esm_embedding_dim,  # ESM-2 embedding size
+        positional_encoding=positional_encoding,
+        periods=periods,  # Known NES periods
+        num_classes=2,  # Binary classification (NES vs non-NES)
+        num_layers=num_layers,  # Number of transformer layers
+        num_heads=num_heads,  # Number of attention heads
+        ff_dim=None,  # Feed-forward dimension (default is 4×embedding_dim)
+        dropout=dropout,  # Dropout rate
+        pooling="cls",  # Use CLS token for pooling
+        add_cls_token=True  # Add a CLS token to the input
+    )
