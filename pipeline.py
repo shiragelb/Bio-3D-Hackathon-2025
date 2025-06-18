@@ -36,12 +36,14 @@ def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_laye
         nes_emb = emb[start:start + nes_len]  # shape: [nes_len, embedding_size]
         nes_embeddings.append(torch.tensor(nes_emb, dtype=torch.float32))
 
-    return nes_embeddings, df
+    labels = torch.tensor(df["positive"].values, dtype=torch.long)
+
+    return nes_embeddings, df, labels
 
 if __name__ == "__main__":
     csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"  
     # Step 1: Extract NES embeddings
-    nes_embeddings, df = extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6)
+    nes_embeddings, df , labels= extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6)
 
     # Step 2: Pad to max length
     padded_embeddings = pad_sequence(nes_embeddings, batch_first=True)  # [batch_size, max_seq_len, embedding_dim]
