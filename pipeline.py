@@ -1,8 +1,7 @@
 import pandas as pd
-import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from esm_embeddings import get_esm_model, get_esm_embeddings
+from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
 from transformer import TransformerClassifier  # Make sure your class is saved in transformer.py
 
 def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6):

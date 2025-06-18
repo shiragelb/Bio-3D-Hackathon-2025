@@ -1,14 +1,14 @@
 import torch
 import esm
 
+
 # All of ESM-2 pre-trained models by embedding size
 ESM_MODELS_DICT = {320: esm.pretrained.esm2_t6_8M_UR50D,
                    480: esm.pretrained.esm2_t12_35M_UR50D,
                    640: esm.pretrained.esm2_t30_150M_UR50D,
                    1280: esm.pretrained.esm2_t33_650M_UR50D,
                    2560: esm.pretrained.esm2_t36_3B_UR50D,
-                   5120: esm.pretrained.esm2_t48_15B_UR50D
-                   }
+                   5120: esm.pretrained.esm2_t48_15B_UR50D}
 
 
 def get_esm_model(embedding_size=1280):
@@ -32,8 +32,7 @@ def get_esm_model(embedding_size=1280):
     return model, alphabet, batch_converter, device
 
 
-def get_esm_embeddings(pep_tuple_list, esm_model, alphabet, batch_converter, device, embedding_layer=33,
-                       sequence_embedding=True):
+def get_esm_embeddings(pep_tuple_list, esm_model, alphabet, batch_converter, device, embedding_layer=33, sequence_embedding=True):
     """
     This function convert peptide sequence data into ESM sequence embeddings
     :param pep_tuple_list: peptide tuple list of format : [(name_1, seq_1), (name_2, seq_2), ...]
@@ -56,14 +55,10 @@ def get_esm_embeddings(pep_tuple_list, esm_model, alphabet, batch_converter, dev
     # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
     representations = []
     for i, tokens_len in enumerate(batch_lens):
-        embedding = token_representations[i, 1: tokens_len - 1]  # embedding.shape: [pep_length, esm_embedding_size]
-        # Notes:
-        #   - pep_length: The length of the peptide protein. Each Amino Acid in the sequence gets an embedding.
-        #   - esm_embedding_size: This is the size we chose in ex4.py (one of: 320, 480, 640, 1280, 2560, 5120).
-        if sequence_embedding:  # Generate per-sequence representations via averaging
-            # TODO: fill this line
-            embedding = embedding.mean(0)  # Average over all Amino Acids to get the sequence embedding
-            # shape is now simply: [embedding_size]
+        embedding = token_representations[i, 1: tokens_len - 1]
+        # Generate per-sequence representations via averaging
+        if sequence_embedding:
+            pass  # TODO: fill this line
         representations.append(embedding.cpu().numpy())
 
     return representations
