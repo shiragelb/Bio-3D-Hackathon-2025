@@ -49,8 +49,8 @@ def get_esm_embeddings(pep_tuple_list, esm_model, alphabet, batch_converter, dev
 
     # Extract per-residue representations
     with torch.no_grad():
-        results = esm_model(batch_tokens.to(device), repr_layers=[embedding_layer])
-    token_representations = results["representations"][embedding_layer]
+        token_representations = esm_model(batch_tokens.to(device),
+                                          repr_layers=[embedding_layer])["representations"][embedding_layer]
 
     # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
     representations = []
