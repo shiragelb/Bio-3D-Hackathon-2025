@@ -5,6 +5,14 @@ from tqdm.auto import tqdm
 from pathlib import Path
 
 
+def accuracy(logits:torch.Tensor, y):
+    """Compute categorical accuracy."""
+    # print("logits: ", logits[:8])
+    preds = logits.argmax(dim=1)
+    gt = y.argmax(dim=1)
+    return (preds == gt).float().mean().item()
+
+
 def data_to_loaders(x, y):
     dataset = TensorDataset(x, y)
     train_size = int(0.8 * len(dataset))
@@ -34,18 +42,13 @@ def data_to_loaders(x, y):
 def train(model, train_loader, val_loader, device):
     # ───────────────────────────── config ────────────────────────────────
     N_EPOCHS = 20
-    LR = 3e-4
+    LR = 1e-7
     WEIGHT_DECAY = 1e-4
     PATIENCE = 5  # early-stopping patience (epochs)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=2)
-
-    def accuracy(logits, y):
-        """Compute categorical accuracy."""
-        preds = logits.argmax(dim=1)
-        return (preds == y).float().mean().item()
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=2)
 
     # ─────────────────────────── training loop ───────────────────────────
     best_acc = 0.0
@@ -67,7 +70,9 @@ def train(model, train_loader, val_loader, device):
             optimizer.step()
 
             train_loss += loss.item() * batch_x.size(0)
-            train_acc += accuracy(logits, batch_y) * batch_x.size(0)
+            with torch.no_grad():
+                # compute accuracy
+                train_acc += accuracy(logits, batch_y) * batch_x.size(0)
 
         train_loss /= len(train_loader.dataset)
         train_acc /= len(train_loader.dataset)
@@ -87,7 +92,7 @@ def train(model, train_loader, val_loader, device):
         val_loss /= len(val_loader.dataset)
         val_acc /= len(val_loader.dataset)
 
-        scheduler.step(val_acc)  # adjust LR if plateau
+        # scheduler.step(val_acc)  # adjust LR if plateau
 
         tqdm.write(
             f"Epoch {epoch:02d} | "
@@ -108,3 +113,21 @@ def train(model, train_loader, val_loader, device):
                 break
 
     print(f"Training complete. Best validation accuracy: {best_acc:.3f}")
+
+
+def evaluate(model, val_loader, device):
+    model.eval()
+    criterion = nn.BCEWithLogitsLoss()
+    val_loss, val_acc = 0.0, 0.0
+    with torch.no_grad():
+        for batch_x, batch_y in val_loader:
+            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+            logits = model(batch_x)
+            loss = criterion(logits, batch_y)
+
+            val_loss += loss.item() * batch_x.size(0)
+            val_acc += accuracy(logits, batch_y) * batch_x.size(0)
+
+    val_loss /= len(val_loader.dataset)
+    val_acc /= len(val_loader.dataset)
+    return val_loss, val_acc

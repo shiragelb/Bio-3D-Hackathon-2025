@@ -66,7 +66,7 @@ class TransformerClassifier(nn.Module):
             self,
             max_len: int,  # The maximum possible NES sequence length
             embedding_dim: int,  # ESM embedding size
-            positional_encoding: str = "periodic_modulo",  # "sinusoidal" or "periodic_modulo"
+            positional_encoding: str,  # "sinusoidal" or "periodic_modulo"
             periods: tuple = None,  # Periods for the periodic encoding
             num_classes: int = 2,
             num_layers: int = 2,
@@ -159,12 +159,12 @@ class TransformerClassifier(nn.Module):
 
 def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
                                num_layers: int = 2, num_heads: int = 4, dropout: float = 0.2,
-                               positional_encoding: str = "SinusoidalPositionalEncoding", ) -> TransformerClassifier:
+                               positional_encoding: str = "sinusoidal", ) -> TransformerClassifier:
     """
     Creates a Transformer classifier for NES classification.
     :return: An instance of TransformerClassifier.
     """
-    if positional_encoding == "SinusoidalPositionalEncoding":
+    if positional_encoding == "sinusoidal":
         periods = None  # No periods needed for sinusoidal encoding
     else:
         periods = (2, 3, 4)
