@@ -44,15 +44,16 @@ class PeriodicModuloEncoding(nn.Module):
         self.mods = nn.ModuleList([
             nn.Embedding(p, d_model) for p in periods
         ])
-
+        self.periods = periods
+        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seq_len = x.size(1)
         pos = torch.arange(seq_len, device=x.device)  # [seq_len]
         # absolute PE
         pe = self.abs(pos)  # [seq_len, d_model]
         # add each periodic component
-        for p, tbl in zip(self.mods, self.mods):
-            pe = pe + tbl(pos % p)
+        for period, tbl in zip(self.periods, self.mods):
+            pe = pe + tbl(pos % period)
         return x + pe.unsqueeze(0)
 
 

@@ -1,8 +1,13 @@
 import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
+<<<<<<< Updated upstream
 from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
 from transformer import TransformerClassifier  # Make sure your class is saved in transformer.py
+=======
+from esm_embeddings import get_esm_model, get_esm_embeddings
+from transformer_NES_classifier import TransformerClassifier  
+>>>>>>> Stashed changes
 
 def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6):
     """
@@ -55,6 +60,7 @@ if __name__ == "__main__":
         max_len=padded_embeddings.size(1),
         embedding_dim=320,
         positional_encoding="periodic_modulo",
+        periods=(2, 3, 4),
         num_classes=2,
         pooling="cls",
         add_cls_token=True
