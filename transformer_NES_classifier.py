@@ -6,7 +6,7 @@ import math
 class PeriodicModuloEncoding(nn.Module):
     """
     Learned absolute positions  +  learned 'mod-p' embeddings.
-    Good when you know useful periods (2-4) a-priori.
+    Using known NES periods of (2-4).
     """
 
     def __init__(self, d_model: int, max_len: int, periods=(2, 3, 4)):
