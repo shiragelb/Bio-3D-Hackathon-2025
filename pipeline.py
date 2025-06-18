@@ -2,7 +2,9 @@ import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
-from transformer_NES_classifier import TransformerClassifier  
+from transformer_NES_classifier import TransformerClassifier
+from train_model import data_to_loaders, train
+
 
 def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6):
     """
@@ -38,18 +40,16 @@ def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_laye
 
     labels = torch.tensor(df["positive"].values, dtype=torch.long)
 
-    return nes_embeddings, df, labels
+    return nes_embeddings, df, labels, device
 
-if __name__ == "__main__":
-    csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"  
+def main():
+    csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"
     # Step 1: Extract NES embeddings
-    nes_embeddings, df , labels= extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6)
+    nes_embeddings, df, labels, device = extract_nes_embeddings_from_csv(csv_path, embedding_size=320,
+                                                                         embedding_layer=6)
 
     # Step 2: Pad to max length
     padded_embeddings = pad_sequence(nes_embeddings, batch_first=True)  # [batch_size, max_seq_len, embedding_dim]
-    
-    # Create dummy labels for testing
-    labels = torch.zeros(len(nes_embeddings), dtype=torch.long)  # All 0s for now
 
     # Step 3: Initialize model
     model = TransformerClassifier(
@@ -60,12 +60,11 @@ if __name__ == "__main__":
         num_classes=2,
         pooling="cls",
         add_cls_token=True
-    )
+    ).to(device)
 
-    # Step 4: Run model on the data
-    with torch.no_grad():
-        logits = model(padded_embeddings)
-        predictions = torch.argmax(logits, dim=1)
+    # Step 4: Create loaders:
+    train_loader, val_loader = data_to_loaders(padded_embeddings, labels)
+    train(model, train_loader, val_loader, device)  # No optimizer needed for inference
 
-    print("Logits:", logits)
-    print("Predictions:", predictions)
+if __name__ == '__main__':
+    main()
