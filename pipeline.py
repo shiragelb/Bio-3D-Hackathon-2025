@@ -2,7 +2,9 @@ import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
-from transformer_NES_classifier import TransformerClassifier  
+from transformer_NES_classifier import TransformerClassifier
+from train_model import data_to_loaders, train
+
 
 
 def extract_nes_embeddings_from_csv(
@@ -76,8 +78,7 @@ def run(
         periods=(2, 3, 4),
         num_classes=2,
         pooling="cls",
-        add_cls_token=True
-    )
+        add_cls_token=True).to(device)
 
     with torch.no_grad():
         logits = model(padded_embeddings)
@@ -118,11 +119,14 @@ if __name__ == "__main__":
         max_rows=10
     )
 
-    save_predictions_to_csv(
-        logits,
-        predictions,
-        df,
-        id_col=id_col,
-        label_col="positive",
-        csv_output_path="model_output.csv"
+    
+    logits, predictions, df, labels, id_col = run(
+        csv_path ="input_sequences\PDB_Bacteria__Helical_Peptides_NESnegative_sequences.csv",
+        name_col="uniprotID",
+        sequence_col="full sequence",
+        start_col="start#",
+        nes_col="NOT NES",
+        label_col="label",
+        id_col="uniprotID",
+        max_rows=10
     )
