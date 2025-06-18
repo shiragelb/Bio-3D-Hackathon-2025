@@ -181,3 +181,13 @@ def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
         pooling="cls",  # Use CLS token for pooling
         add_cls_token=True  # Add a CLS token to the input
     )
+
+def main():
+    """ Example usage """
+    max_seq_len = 30  # Maximum length of NES sequences
+    esm_embedding_dim = 320  # ESM-2 embedding size
+    transformer_classifier = get_transformer_classifier(
+        max_seq_len=max_seq_len,
+        esm_embedding_dim=esm_embedding_dim,
+    )
+    return transformer_classifier
