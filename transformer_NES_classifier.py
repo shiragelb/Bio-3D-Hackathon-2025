@@ -1,0 +1,113 @@
+import torch
+import torch.nn as nn
+import math
+
+
+class PeriodicModuloEncoding(nn.Module):
+    """
+    Learned absolute positions  +  learned 'mod-p' embeddings.
+    Good when you know useful periods (2-4) a-priori.
+    """
+
+    def __init__(self, d_model: int, max_len: int, periods=(2, 3, 4)):
+        super().__init__()
+        self.abs = nn.Embedding(max_len, d_model)  # absolute part
+        # one separate embedding table for each period
+        self.mods = nn.ModuleList([
+            nn.Embedding(p, d_model) for p in periods
+        ])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        seq_len = x.size(1)
+        pos = torch.arange(seq_len, device=x.device)  # [seq_len]
+        # absolute PE
+        pe = self.abs(pos)  # [seq_len, d_model]
+        # add each periodic component
+        for p, tbl in zip(self.mods, self.mods):
+            pe = pe + tbl(pos % p)
+        return x + pe.unsqueeze(0)
+
+
+class TransformerClassifier(nn.Module):
+    """
+    Generic encoder-only transformer for sequence-level classification.
+    """
+
+    def __init__(
+            self,
+            max_len: int,  # The maximum possible NES sequence length
+            embedding_dim: int,  # ESM embedding size
+            periods: tuple = (2, 3, 4),  # Periods for the periodic encoding
+            num_classes: int = 2,
+            num_layers: int = 2,
+            num_heads: int = 4,
+            ff_dim: int = None,  # Dimension of the feed-forward at the end. If None → 4×embedding_dim
+            dropout: float = 0.2,
+            pooling: str = "cls",  # "cls" or "mean"
+            add_cls_token: bool = True
+    ):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.pooling = pooling.lower()
+        self.add_cls_token = add_cls_token
+
+        if self.add_cls_token and self.pooling == "cls":
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
+            nn.init.trunc_normal_(self.cls_token, std=0.02)
+
+        self.pos_encoder = PeriodicModuloEncoding(
+            d_model=embedding_dim, max_len=max_len + int(add_cls_token), periods=periods
+        )
+
+        ff_dim = ff_dim or embedding_dim * 4
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embedding_dim,
+            nhead=num_heads,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            batch_first=True,  # (batch, seq, feature) in ≥1.13
+        )
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_layers
+        )
+
+        self.norm = nn.LayerNorm(embedding_dim)
+        self.classifier = nn.Linear(embedding_dim, num_classes)
+
+    def forward(
+            self,
+            x: torch.Tensor,
+            key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        x: [batch, seq_len, embedding_dim]  -- pre-computed embeddings
+        key_padding_mask: [batch, seq_len] with True for PAD tokens
+        """
+        if self.add_cls_token and self.pooling == "cls":
+            cls_tokens = self.cls_token.expand(x.size(0), -1, -1)
+            x = torch.cat([cls_tokens, x], dim=1)  # prepend so that the input is [cls, embedding1, embedding2, ...]
+            if key_padding_mask is not None:
+                pad = torch.zeros(
+                    (key_padding_mask.size(0), 1),
+                    dtype=torch.bool,
+                    device=key_padding_mask.device,
+                )
+                key_padding_mask = torch.cat([pad, key_padding_mask], dim=1)
+
+        x = self.pos_encoder(x) # Add positional encoding to input
+        x = self.encoder(x, src_key_padding_mask=key_padding_mask)
+        x = self.norm(x)
+
+        if self.pooling == "cls":
+            pooled = x[:, 0]  # [batch, dim]
+        elif self.pooling == "mean":
+            # ignore padding positions if mask supplied
+            if key_padding_mask is not None:
+                lens = (~key_padding_mask).sum(dim=1, keepdim=True)  # [batch,1]
+                pooled = (x * (~key_padding_mask).unsqueeze(-1)).sum(dim=1) / lens
+            else:
+                pooled = x.mean(dim=1)
+        else:
+            raise ValueError("pooling must be 'cls' or 'mean'")
+
+        return self.classifier(pooled)  # Outputs num_classes logits for each sequence in the batch.
