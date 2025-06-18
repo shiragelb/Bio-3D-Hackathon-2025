@@ -3,6 +3,34 @@ import torch.nn as nn
 import math
 
 
+class SinusoidalPositionalEncoding(nn.Module):
+    """
+    Standard (fixed) sinusoidal positional encodings from
+    No gradients/learned params.
+    """
+
+    def __init__(self, d_model: int, max_len: int):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)  # [max_len, d_model]
+        position = torch.arange(0, max_len).unsqueeze(1)  # [max_len, 1]
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) *
+            -(math.log(10000.0) / d_model)
+        )  # [d_model/2]
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)  # [1, max_len, d_model]
+        self.register_buffer("pe", pe, persistent=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: [batch, seq_len, d_model]
+        """
+        seq_len = x.size(1)
+        return x + self.pe[:, :seq_len]
+
+
 class PeriodicModuloEncoding(nn.Module):
     """
     Learned absolute positions  +  learned 'mod-p' embeddings.
@@ -37,6 +65,7 @@ class TransformerClassifier(nn.Module):
             self,
             max_len: int,  # The maximum possible NES sequence length
             embedding_dim: int,  # ESM embedding size
+            positional_encoding: str = "periodic_modulo",  # "sinusoidal" or "periodic_modulo"
             periods: tuple = (2, 3, 4),  # Periods for the periodic encoding
             num_classes: int = 2,
             num_layers: int = 2,
@@ -47,6 +76,11 @@ class TransformerClassifier(nn.Module):
             add_cls_token: bool = True
     ):
         super().__init__()
+        if positional_encoding not in ["sinusoidal", "periodic_modulo"]:
+            raise ValueError("positional_encoding must be 'sinusoidal' or 'periodic_modulo'")
+        if pooling not in ["cls", "mean"]:
+            raise ValueError("pooling must be 'cls' or 'mean'")
+
         self.embedding_dim = embedding_dim
         self.pooling = pooling.lower()
         self.add_cls_token = add_cls_token
@@ -55,9 +89,16 @@ class TransformerClassifier(nn.Module):
             self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
             nn.init.trunc_normal_(self.cls_token, std=0.02)
 
-        self.pos_encoder = PeriodicModuloEncoding(
-            d_model=embedding_dim, max_len=max_len + int(add_cls_token), periods=periods
-        )
+        if positional_encoding == "sinusoidal":
+            if periods:
+                raise ValueError("periods should not be specified for sinusoidal encodings!")
+            self.pos_encoder = SinusoidalPositionalEncoding(
+                d_model=embedding_dim, max_len=max_len + int(add_cls_token)
+            )
+        elif positional_encoding == "periodic_modulo":
+            self.pos_encoder = PeriodicModuloEncoding(
+                d_model=embedding_dim, max_len=max_len + int(add_cls_token), periods=periods
+            )
 
         ff_dim = ff_dim or embedding_dim * 4
         encoder_layer = nn.TransformerEncoderLayer(
@@ -94,7 +135,7 @@ class TransformerClassifier(nn.Module):
                 )
                 key_padding_mask = torch.cat([pad, key_padding_mask], dim=1)
 
-        x = self.pos_encoder(x) # Add positional encoding to input
+        x = self.pos_encoder(x)  # Add positional encoding to input
         x = self.encoder(x, src_key_padding_mask=key_padding_mask)
         x = self.norm(x)
 
