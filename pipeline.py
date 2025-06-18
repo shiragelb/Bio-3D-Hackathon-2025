@@ -1,13 +1,8 @@
 import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
-<<<<<<< Updated upstream
 from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
-from transformer import TransformerClassifier  # Make sure your class is saved in transformer.py
-=======
-from esm_embeddings import get_esm_model, get_esm_embeddings
 from transformer_NES_classifier import TransformerClassifier  
->>>>>>> Stashed changes
 
 def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6):
     """
@@ -44,8 +39,7 @@ def extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_laye
     return nes_embeddings, df
 
 if __name__ == "__main__":
-    csv_path = "NESdb_NESpositive_sequences.csv"  # replace with actual path
-
+    csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"  
     # Step 1: Extract NES embeddings
     nes_embeddings, df = extract_nes_embeddings_from_csv(csv_path, embedding_size=320, embedding_layer=6)
 
