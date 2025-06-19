@@ -173,6 +173,7 @@ def main():
     # 3. Train the model on the train embeddings
     padded_embeddings = pad_sequence(train_embeddings, batch_first=True)
     train_loader, val_loader = data_to_loaders(padded_embeddings, train_labels)
+
     model = process_and_train(train_loader, val_loader, device=device,
                               max_seq_len=padded_embeddings.size(1), emb_dim=padded_embeddings.size(2))
 
