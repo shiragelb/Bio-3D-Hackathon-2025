@@ -93,7 +93,6 @@ def extract_embeddings(csv_path, embedding_size=320, embedding_layer=6, embeddin
         'df': df,
         'device': device
     }, embedding_path)
-
     return nes_embeddings, labels, df, device
 
 
