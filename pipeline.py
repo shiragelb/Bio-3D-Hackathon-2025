@@ -10,7 +10,7 @@ from train_model import data_to_loaders, train, evaluate
 import random
 
 
-def create_dataset_from_csvs(pos_csv, neg_csv, pos_ratio, output_csv_path, seed=42):
+def create_dataset_from_csvs(pos_csv, neg_csv, output_csv_path):
     pos_df = pd.read_csv(pos_csv)
     neg_df = pd.read_csv(neg_csv)
 
@@ -81,7 +81,6 @@ def extract_embeddings(csv_path, embedding_size=320, embedding_layer=6, embeddin
 
     df.drop(index=bad_labels, inplace=True)  # drop rows with bad labels
     # convert labels to tensor of shape (N, 2):
-    # labels = torch.tensor(df["label"].values)
     labels = torch.tensor([[0, 1] if label == 1 else [0, 1] for label in df["label"].values], dtype=torch.float32)
 
     torch.save({
@@ -141,7 +140,7 @@ def main():
     output_predictions_csv = "model_output.csv"
 
     # 1. Create combined dataset CSV with desired positive ratio
-    create_dataset_from_csvs(pos_csv_path, neg_csv_path, pos_ratio=0.5, output_csv_path=combined_csv_path)
+    create_dataset_from_csvs(pos_csv_path, neg_csv_path, output_csv_path=combined_csv_path)
 
     # 2. Extract embeddings and labels for training set
     train_embeddings, train_labels, train_df, device = extract_embeddings(combined_csv_path, embedding_path="train_embeddings.pt")
