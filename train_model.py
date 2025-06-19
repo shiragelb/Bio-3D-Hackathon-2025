@@ -14,13 +14,13 @@ def accuracy(logits:torch.Tensor, y):
     return (preds == gt).float().mean().item()
 
 
-def data_to_loaders(x, y):
+def data_to_loaders(x, y, train_fraction=0.8):
     dataset = TensorDataset(x, y)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
+    train_fraction = int(train_fraction * len(dataset))
+    val_size = len(dataset) - train_fraction
     train_ds, val_ds = random_split(
         dataset,
-        [train_size, val_size],
+        [train_fraction, val_size],
         generator=torch.Generator().manual_seed(42)  # <- reproducible split
     )
 
