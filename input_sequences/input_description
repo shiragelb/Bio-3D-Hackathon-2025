@@ -1,16 +1,25 @@
 description of the input files
-NESdb_NESpositive_sequences.sv - contaitns sequences extracted from specilized database with experimentally confimed NES
+NESdb_NESpositive_sequences.csv:
+contains sequences extracted from specilized database with experimentally confimed NES
 positive Human proteins
-Containts: name - name of the protein, species(viral/ Human genome origin) ,NES sequence - identified NES motive in the protein
-, full sequence (of the protein) label = 1 i.e positive 
+Containts: 
+name - name of the protein, 
+species - (viral/ Human genome origin) 
+NES sequence - identified NES motive in the protein
+full sequence (of the protein) 
+label = 1 i.e positive 
 
 462 positive examples
+
+
 
 PDB_Bacteria__Helical_Peptides_NESnegative_sequences.csv
 contains: sequences derived from the PDB by searching for alpha-helical peptides from bactrial sources.
 full protein sequences and NOT NESS are random 20 amino acid snipets derived from the full sequences.
 
 1856 negative examples
+
+
 
 deep_proteomics.csv
 contains: 
