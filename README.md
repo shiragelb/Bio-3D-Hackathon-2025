@@ -1,6 +1,8 @@
 # **NES-Finder: A Transformer-based Pipeline for Identifying Novel Nuclear Export Signals**
 
-**Hackathon 2025**
+**A project for the "3D and 4D Structural Biology Data Processing" course (76562) Hackathon.**
+* **Lecturers:** Prof. Dina Schneidman, Dr. Barak Raveh
+* **Teaching Assistant:** Mr. Tomer Cohen
 
 * **Team Members:** Daniel Levin, Imri Shuval, Shira Gelbstein, Ron Levin
 
@@ -23,8 +25,8 @@ Follow these steps to set up the environment and run the analysis pipeline.
 **1\. Setup Environment**
 
 \# Clone the repository  
-git clone \[Your-Repository-URL\]  
-cd \[repository-name\]
+git clone github.com/shiragelb/Bio-3D-Hackathon-2025  
+cd Bio-3D-Hackathon-2025
 
 \# Create and activate a Python virtual environment (recommended)  
 python \-m venv venv  
