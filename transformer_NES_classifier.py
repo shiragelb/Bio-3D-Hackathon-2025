@@ -2,6 +2,24 @@ import torch
 import torch.nn as nn
 import math
 
+# ---------------------------------------------------------------------
+# NEW: helper that normal-initialises every Linear / Embedding weight
+# ---------------------------------------------------------------------
+def _init_weights(module, mean: float = 0.0, std: float = 0.02):
+    """
+    Apply N(0, std²) to all learnable parameters that benefit from it.
+    • Linear, Embedding → weight ~ 𝒩(mean, std²)
+    • bias → 0
+    • LayerNorm → weight = 1, bias = 0   (standard LN init)
+    """
+    if isinstance(module, (nn.Linear, nn.Embedding)):
+        nn.init.normal_(module.weight, mean=mean, std=std)
+        if getattr(module, "bias", None) is not None:
+            nn.init.zeros_(module.bias)
+
+    elif isinstance(module, nn.LayerNorm):
+        nn.init.ones_(module.weight)
+        nn.init.zeros_(module.bias)
 
 class SinusoidalPositionalEncoding(nn.Module):
     """
@@ -117,6 +135,8 @@ class TransformerClassifier(nn.Module):
 
         self.norm = nn.LayerNorm(embedding_dim)
         self.classifier = nn.Linear(embedding_dim, num_classes)
+
+        self.apply(_init_weights)
 
     def forward(
             self,
