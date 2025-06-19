@@ -22,3 +22,6 @@ Enrichment from input - is experimental data that tells us how strong the tested
 Note: in non binding (negatives) proteins enrichment is 0 or close to 0 and is expected.
 
 Expectation: the probability of a protein to be positive should corelate to Enrichment from input.
+
+
+human_proteom.csv - 20420 human protiens downloaded from uniProt
