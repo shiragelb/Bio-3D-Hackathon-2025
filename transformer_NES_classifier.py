@@ -86,7 +86,6 @@ class TransformerClassifier(nn.Module):
             embedding_dim: int,  # ESM embedding size
             positional_encoding: str,  # "sinusoidal" or "periodic_modulo"
             periods: tuple = None,  # Periods for the periodic encoding
-            num_classes: int = 2,
             num_layers: int = 2,
             num_heads: int = 4,
             ff_dim: int = None,  # Dimension of the feed-forward at the end. If None → 4×embedding_dim
@@ -134,7 +133,7 @@ class TransformerClassifier(nn.Module):
         )
 
         self.norm = nn.LayerNorm(embedding_dim)
-        self.classifier = nn.Linear(embedding_dim, num_classes)
+        self.classifier = nn.Linear(embedding_dim, 1)
 
         self.apply(_init_weights)
 
@@ -173,12 +172,13 @@ class TransformerClassifier(nn.Module):
                 pooled = x.mean(dim=1)
         else:
             raise ValueError("pooling must be 'cls' or 'mean'")
+        # return (self.classifier(pooled)*0+0.5)+torch.tensor([0.,1.]).to("cuda")
 
-        return self.classifier(pooled)  # Tensor [batch_size, num_classes]
+        return self.classifier(pooled).squeeze(1)  # Tensor [batch_size, num_classes]
 
 
 def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
-                               num_layers: int = 2, num_heads: int = 4, dropout: float = 0.2,
+                               num_layers: int = 2, num_heads: int = 4, dropout: float = 0.5,
                                positional_encoding: str = "sinusoidal", ) -> TransformerClassifier:
     """
     Creates a Transformer classifier for NES classification.
@@ -194,7 +194,6 @@ def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
         embedding_dim=esm_embedding_dim,  # ESM-2 embedding size
         positional_encoding=positional_encoding,
         periods=periods,  # Known NES periods
-        num_classes=2,  # Binary classification (NES vs non-NES)
         num_layers=num_layers,  # Number of transformer layers
         num_heads=num_heads,  # Number of attention heads
         ff_dim=None,  # Feed-forward dimension (default is 4×embedding_dim)

@@ -41,7 +41,7 @@ def extract_embeddings(csv_path, embedding_size=320, embedding_layer=6, embeddin
 
     print("Extracting embeddings from", csv_path)
     df = pd.read_csv(csv_path)
-    df.drop(columns=['name', 'Unnamed: 6'], inplace=True)
+    # df.drop(columns=['name', 'Unnamed: 6'], inplace=True)
     pep_tuples = list(zip(df["uniprotID"], df["full sequence"]))
 
     esm_model, alphabet, batch_converter, device = get_esm_model(embedding_size=embedding_size)
@@ -86,7 +86,7 @@ def extract_embeddings(csv_path, embedding_size=320, embedding_layer=6, embeddin
 
     df.drop(index=bad_labels, inplace=True)  # drop rows with bad labels
     # convert labels to tensor of shape (N, 2):
-    labels = torch.tensor([[0, 1] if label == 1 else [1, 0] for label in df["label"].values], dtype=torch.float32)
+    labels = torch.tensor(df["label"].values, dtype=torch.float32)
     torch.save({
         'nes_embeddings': nes_embeddings,
         'labels': labels,
@@ -104,19 +104,25 @@ def process_and_train(train_loader, val_loader, max_seq_len, emb_dim, device):
     ).to(device)
 
     print("Evaluating model before training...")
-    val_loss, val_acc, predictions, probabilities, labels = evaluate(model, val_loader, device)
+    val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
     print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
+    print("Avg probability given :", probabilities.mean().item())
+
     train(model, train_loader, val_loader, device)
     print("\nEvaluating model post training...")
-    val_loss, val_acc, predictions, probabilities, labels = evaluate(model, val_loader, device)
+    val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
     print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
-    print("Avg probability of positive class:", probabilities[:, 1].mean().item())
-    print("Avg probability of negative class:", probabilities[:, 0].mean().item())
+    print("Avg probability given :", probabilities.mean().item())
     # Calculating false positive and false negative rates:
-    false_positive_rate = (predictions[labels[:, 0] == 1] == 1).sum().item() / (labels[:, 0] == 1).sum().item()
-    false_negative_rate = (predictions[labels[:, 1] == 1] == 0).sum().item() / (labels[:, 1] == 1).sum().item()
-    print("False Positive Rate:", false_positive_rate)
-    print("False Negative Rate:", false_negative_rate)
+    tp = np.sum((preds == 1) & (labels == 1))   # true positives count
+    tn = np.sum((preds == 0) & (labels == 0))   # true negatives count
+    fp = np.sum((preds == 1) & (labels == 0))   # false positives count
+    fn = np.sum((preds == 0) & (labels == 1))   # false negatives count
+    # Now calculate rates:
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+    print(f"False Positive Rate (FPR): {fpr:.3%}")
+    print(f"False Negative Rate (FNR): {fnr:.3%}")
     return model
 
 
@@ -145,8 +151,6 @@ def save_predictions_to_csv(logits, predictions, df, output_csv_path):
 
 def plot_embeds_in_2d(embeds, labels):
     train_np = np.array([emb.mean(0) for emb in embeds])
-    # labels are currently in [0/1, 0/1] format, convert to 0/1:
-    labels = [1 if label[1] == 1 else 0 for label in labels]
     k_means_labels = kmeans_clustering(train_np, k=2)
     coords_2d = tsne_dim_reduction(train_np, dim=2)
 
