@@ -1,3 +1,4 @@
+import numpy as np
 import torch.nn
 from torch import optim, nn
 from torch.utils.data import DataLoader, random_split, TensorDataset
@@ -42,9 +43,9 @@ def data_to_loaders(x, y):
 def train(model, train_loader, val_loader, device):
     # ───────────────────────────── config ────────────────────────────────
     N_EPOCHS = 20
-    LR = 1e-7
+    LR = 1e-6
     WEIGHT_DECAY = 1e-4
-    PATIENCE = 5  # early-stopping patience (epochs)
+    PATIENCE = 99  # early-stopping patience (epochs)
 
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
@@ -119,10 +120,25 @@ def evaluate(model, val_loader, device):
     model.eval()
     criterion = nn.BCEWithLogitsLoss()
     val_loss, val_acc = 0.0, 0.0
+
+    labels = []
+    probabilities = []
+    predictions = []
+
     with torch.no_grad():
         for batch_x, batch_y in val_loader:
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-            logits = model(batch_x)
+
+
+            logits = model(batch_x)                    # [B, 2]
+            prob   = torch.softmax(logits, dim=1)      # [B, 2]
+            preds  = logits.argmax(dim=1)              # [B]
+
+            # Storing predictions, probabilities, labels
+            labels.extend(batch_y.cpu().numpy())       # [B]
+            probabilities.extend(prob.cpu().numpy())   # [B, 2]
+            predictions.extend(preds.cpu().numpy())    # [B]
+
             loss = criterion(logits, batch_y)
 
             val_loss += loss.item() * batch_x.size(0)
@@ -130,4 +146,4 @@ def evaluate(model, val_loader, device):
 
     val_loss /= len(val_loader.dataset)
     val_acc /= len(val_loader.dataset)
-    return val_loss, val_acc
+    return val_loss, val_acc, np.array(predictions), np.array(probabilities), np.array(labels)
