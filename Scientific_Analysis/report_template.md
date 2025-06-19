@@ -51,7 +51,7 @@ Our model was trained and validated using data from the NesDB database. We curat
 
 #### Computational Approach
 
-Our pipeline consists of two main stages:
+Our pipeline consists of three main stages:
 
 **1\. Sequence Representation:** We first convert protein sequences into a numerical format using the **ESM-2 protein language model**. This model generates per-residue embeddings that capture contextual information about each amino acid.
 
