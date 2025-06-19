@@ -11,3 +11,17 @@ contains: sequences derived from the PDB by searching for alpha-helical peptides
 full protein sequences and NOT NESS are random 20 amino acid snipets derived from the full sequences.
 
 1856 negative examples
+
+deep_proteomics.csv
+contains: 
+1027 positive sequences
+868 negative sequences
+
+columns: uniprotID, bidining category - relates to enrichment from starting sample in experiment, sequence (full protein sequence) and Enrichment from input.
+Enrichment from input - is experimental data that tells us how strong the tested protein binds to CRM-1, in our case higher enrichment means more likly to be POSITIVE.
+Note: in non binding (negatives) proteins enrichment is 0 or close to 0 and is expected.
+
+Expectation: the probability of a protein to be positive should corelate to Enrichment from input.
+
+
+human_proteom.csv - 20420 human protiens downloaded from uniProt
