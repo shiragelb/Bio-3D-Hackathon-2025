@@ -194,13 +194,11 @@ def main():
     test_labels = np.array(test_labels)
     acc = np.mean(predictions == test_labels)
     print("Test acc: ", acc)
-    # TODO - calculate acc for only positives (label == 1)
     pos_mask = test_labels == 1  # positives
     pos_acc = (predictions[pos_mask] == 1).mean() if pos_mask.any() else float("nan")
     print("Fraction of samples predicted as positive: ", (predictions == 1).sum() / len(test_labels))
     print("Acc of positive samples: ", pos_acc)
 
-    # TODO - calculate acc for only negative (label == 0)
     neg_mask = test_labels == 0  # negatives
     neg_acc = (predictions[neg_mask] == 0).mean() if neg_mask.any() else float("nan")
     print("Fraction of samples predicted as negative: ", (predictions == 0).sum() / len(test_labels))
