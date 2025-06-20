@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import pandas as pd
 import torch
@@ -6,10 +7,10 @@ from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
 from Ex4_files.clustering import kmeans_clustering, tsne_dim_reduction
-from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
 from Ex4_files.plot import plot_2dim_reduction
 from create_data import create_data
-from transformer_NES_classifier import get_transformer_classifier
+from nets.FF_classifier import get_FF_classifier
+from nets.transformer_NES_classifier import get_transformer_classifier
 from train_model import data_to_loaders, train, evaluate
 from create_data import extract_embeddings
 
@@ -32,12 +33,22 @@ def create_dataset_from_csvs(pos_csv, neg_csv, output_csv_path):
     return output_csv_path
 
 
-def process_and_train(train_loader, val_loader, max_seq_len, emb_dim, device):
-    model = get_transformer_classifier(
-        max_seq_len=max_seq_len,
-        esm_embedding_dim=emb_dim,
-    ).to(device)
+def get_model(model_type, max_seq_len, emb_dim, device):
+    if model_type == "transformer_classifier":
+        print("Using a transformer classifier")
+        model = get_transformer_classifier(
+            max_seq_len=max_seq_len,
+            esm_embedding_dim=emb_dim,
+        ).to(device)
+    elif model_type == "FF_classifier":
+        print("Using a simple feed-forward network")
+        model = get_FF_classifier(seq_len=max_seq_len, emb_dim=emb_dim).to(device)
+    else:
+        raise ValueError("Unknown model type")
+    return model
 
+
+def process_and_train(model, train_loader, val_loader, device):
     if val_loader:
         print("Evaluating model before training...")
         val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
@@ -76,12 +87,16 @@ def predict(model, nes_embeddings):
     return logits, probabilities, predictions
 
 
-def save_predictions_to_csv(probabilities, predictions, labels, output_csv_path):
-    probs_str = [str(p) for p in probabilities]
+def save_predictions_to_csv(scores, predictions, labels, output_csv_path):
+    """
+    Scores are between 0 and 1.
+    The predictions are based on a threshold of score>=0.5 == positive prediction, else negative.
+    """
+    scores_str = [str(s) for s in scores]
     output_df = pd.DataFrame({
         # "uniprotID": df["uniprotID"].tolist(),
-        "logits": probs_str,
-        "predictions": predictions,
+        "score": scores_str,
+        "predictions (threshold 0.5)": predictions,
         "labels": labels.tolist()
     })
     output_df.to_csv(output_csv_path, index=False)
@@ -100,13 +115,29 @@ def plot_embeds_in_2d(embeds, labels):
 def calc_test_prediction(predictions, labels):
     prediction_aggregated = torch.max(predictions, dim=1)[0]  # Get the max probability for each sample
 
+def set_seeds(seed:int=42):
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
 
-def main_new():
+
+def main():
+    set_seeds()
+
+    model_type = ["FF_classifier", "transformer_classifier"][1]
+    load_prepare_model = [True, False][0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     output_predictions_csv = "model_output.csv"
 
     # 1. Get embeddings and labels for training and test sets
     train_embeds, train_labels, test_embeds, test_labels = create_data()
+    window_size = train_embeds.size(1)
+    embed_dim = train_embeds.size(2)
+
+    model_identifier = f"{model_type}_w-{window_size}_emb-{embed_dim}"
+    model_savepath = f"models/{model_identifier}.pt"
+
     pos_count, neg_count = 0, 0
     for label in train_labels:
         if label == 0:
@@ -117,10 +148,26 @@ def main_new():
 
     # 2. Train model
     train_loader = data_to_loaders(train_embeds, train_labels, train_fraction=1)
-    window_size = train_embeds.size(1)
-    model = process_and_train(train_loader, val_loader=None, device=device,
-                              max_seq_len=window_size, emb_dim=train_embeds.size(2))
+    model = get_model(model_type=model_type, max_seq_len=window_size, emb_dim=embed_dim, device=device)
+    if load_prepare_model:
+        saved = torch.load(model_savepath)
+        state_dict = saved["model_state_dict"]
+        model.load_state_dict(state_dict)
+    else: # Train
+        model = get_model(model_type=model_type, max_seq_len=window_size, emb_dim=embed_dim, device=device)
+        model = process_and_train(model=model, train_loader=train_loader, val_loader=None, device=device)
+        # Save model:
+        os.makedirs("models", exist_ok=True)
+        torch.save(
+            {
+                "model_state_dict": model.state_dict(),  # weights
+                "max_seq_len": window_size,  # hyper-params needed to rebuild
+                "emb_dim": train_embeds.size(2),
+            },
+            model_savepath
+        )
 
+    output_predictions_csv = f"test_output_{model_identifier}.csv"
     # 3. Run model on test set
     print("Running model on test set...")
     pos_count, neg_count = 0, 0
@@ -130,18 +177,18 @@ def main_new():
         else:
             pos_count += 1
     print(f"Test set contains {pos_count} positive labels and {neg_count} negative labels.")
-    test_pred_probs = []
+    test_pred_scores = []
     test_embeds, test_labels = test_embeds, test_labels
     for embed in tqdm(test_embeds):
         embed = embed.unsqueeze(0)  # Add batch dim
-        logits, probs = model.predict_on_test(embed, W=window_size)
-        logits, probs = torch.tensor(logits), torch.tensor(probs)
-        prob_aggregated = torch.max(probs)  # Get the max probability for each sample
-        test_pred_probs.append(prob_aggregated)
-
+        logits, score = model.predict_on_test(embed, W=window_size)
+        logits, score = torch.tensor(logits), torch.tensor(score)
+        scores_aggregated = torch.max(score)  # Get the max probability for each sample
+        test_pred_scores.append(scores_aggregated)
+    test_pred_scores = [t.item() for t in test_pred_scores]
     threshold = 0.5
-    predictions = np.array([1 if prob >= threshold else 0 for prob in test_pred_probs])
-    save_predictions_to_csv(test_pred_probs, predictions, test_labels, output_predictions_csv)
+    predictions = np.array([1 if prob >= threshold else 0 for prob in test_pred_scores])
+    save_predictions_to_csv(test_pred_scores, predictions, test_labels, output_predictions_csv)
 
     print("Training and testing complete. Predictions saved to", output_predictions_csv)
     test_labels = np.array(test_labels)
@@ -159,41 +206,5 @@ def main_new():
     print("Fraction of samples predicted as negative: ", (predictions == 0).sum() / len(test_labels))
     print("Acc of negative samples: ", neg_acc)
 
-
-def main():
-    pos_csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"
-    neg_csv_path = "input_sequences/PDB_Bacteria__Helical_Peptides_NESnegative_sequences.csv"
-    combined_csv_path = "input_sequences/combined_dataset.csv"
-    test_csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"
-    output_predictions_csv = "model_output.csv"
-
-    # 1. Create combined dataset CSV with desired positive ratio
-    create_dataset_from_csvs(pos_csv_path, neg_csv_path, output_csv_path=combined_csv_path)
-
-    # 2. Extract embeddings and labels for training set
-    train_embeddings, train_labels, train_df, device = extract_embeddings(combined_csv_path,
-                                                                          embedding_path="train_embeddings.pt")
-    plot_embeds_in_2d(train_embeddings, train_labels)
-
-    # 3. Train the model on the train embeddings
-    padded_embeddings = pad_sequence(train_embeddings, batch_first=True)
-    train_loader, val_loader = data_to_loaders(padded_embeddings, train_labels)
-
-    model = process_and_train(train_loader, val_loader, device=device,
-                              max_seq_len=padded_embeddings.size(1), emb_dim=padded_embeddings.size(2))
-
-    # 4. Extract embeddings for the test set
-    test_embeddings, test_labels, test_df, _ = extract_embeddings(test_csv_path, embedding_path="test_embeddings.pt")
-
-    # 5. Run the trained model on test embeddings
-    W = -1  # Window size we trained on
-    probs = model.predict_on_test(test_embeddings, W=W)
-    threshold = 0.5
-    predictions = [1 if prob >= threshold else 0 for prob in probs]
-    save_predictions_to_csv(probs, predictions, test_df, output_predictions_csv)
-
-    print("Training and testing complete. Predictions saved to", output_predictions_csv)
-
-
 if __name__ == "__main__":
-    main_new()
+    main()
