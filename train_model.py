@@ -3,7 +3,6 @@ import torch.nn
 from torch import optim, nn
 from torch.utils.data import DataLoader, random_split, TensorDataset
 from tqdm.auto import tqdm
-from pathlib import Path
 import torch
 
 
@@ -44,9 +43,9 @@ def data_to_loaders(x, y, train_fraction=0.8, sampler=None):
     return train_loader
 
 
-def train(model, train_loader, val_loader, device):
+def train(model, train_loader, val_loader, device, save_path=None):
     # ───────────────────────────── config ────────────────────────────────
-    N_EPOCHS = 30
+    N_EPOCHS = 10
     LR = 1e-5
     WEIGHT_DECAY = 1e-4
     PATIENCE = 99  # early-stopping patience (epochs)
@@ -58,7 +57,6 @@ def train(model, train_loader, val_loader, device):
     # ─────────────────────────── training loop ───────────────────────────
     best_acc = 0.0
     epochs_no_improve = 0
-    save_path = Path("best_model.pt")
     all_train_preds = []
     for epoch in range(1, N_EPOCHS + 1):
         epoch_probs = []
@@ -108,50 +106,57 @@ def train(model, train_loader, val_loader, device):
 
         # ---------- validation phase ----------
         model.eval()
-        val_loss     = 0.0
-        val_correct  = 0
-        val_samples  = 0
+        val_loss = 0.0
+        val_correct = 0
+        val_samples = 0
 
-        with torch.no_grad():
-            for xb, yb in val_loader:
-                xb, yb = xb.to(device), yb.to(device)
+        if val_loader:
+            with torch.no_grad():
+                for xb, yb in val_loader:
+                    xb, yb = xb.to(device), yb.to(device)
 
-                logits = model(xb)
-                loss   = criterion(logits, yb.float())
-                bs            = xb.size(0)
-                val_samples  += bs
-                val_loss     += loss.item() * bs
-                p_pos = torch.sigmoid(logits).squeeze(dim=-1)  # [B]
-                preds_batch = (p_pos >= 0.5).long()  # [B] – 0 or 1
-                y_idx         = yb.argmax(dim=1) if yb.dim() == 2 else yb
-                val_correct  += (preds_batch == y_idx).sum().item()
+                    logits = model(xb)
+                    loss = criterion(logits, yb.float())
+                    bs = xb.size(0)
+                    val_samples += bs
+                    val_loss += loss.item() * bs
+                    p_pos = torch.sigmoid(logits).squeeze(dim=-1)  # [B]
+                    preds_batch = (p_pos >= 0.5).long()  # [B] – 0 or 1
+                    y_idx = yb.argmax(dim=1) if yb.dim() == 2 else yb
+                    val_correct += (preds_batch == y_idx).sum().item()
 
+            avg_val_loss = val_loss / val_samples
+            avg_val_acc = val_correct / val_samples
 
-        avg_val_loss = val_loss / val_samples
-        avg_val_acc  = val_correct / val_samples
+            tqdm.write(
+                f"Epoch {epoch:02d} | "
+                f"train loss/acc: {avg_train_loss:.4f}/{avg_train_acc:.3f} | "
+                f"val loss/acc: {avg_val_loss:.4f}/{avg_val_acc:.3f} | "
+                f"Avg probability during training epoch: {np.mean(epoch_probs):.3f} | "
+                f"Variance of probabilities during training epoch: {np.var(epoch_probs):.3f}"
+            )
 
         tqdm.write(
             f"Epoch {epoch:02d} | "
             f"train loss/acc: {avg_train_loss:.4f}/{avg_train_acc:.3f} | "
-            f"val loss/acc: {avg_val_loss:.4f}/{avg_val_acc:.3f} | "
             f"Avg probability during training epoch: {np.mean(epoch_probs):.3f} | "
             f"Variance of probabilities during training epoch: {np.var(epoch_probs):.3f}"
         )
+        if val_loader:
+            # ----- early stopping & checkpoint -----
+            if avg_val_acc > best_acc:
+                best_acc = avg_val_acc
+                epochs_no_improve = 0
+                if save_path:
+                    torch.save(model.state_dict(), save_path)
+                # tqdm.write(f"  ↳ New best val-acc {best_acc:.3f} → saved to {save_path}")
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= PATIENCE:
+                    tqdm.write("Early stopping triggered.")
+                    break
 
-        # ----- early stopping & checkpoint -----
-        if avg_val_acc > best_acc:
-            best_acc = avg_val_acc
-            epochs_no_improve = 0
-            torch.save(model.state_dict(), save_path)
-            # tqdm.write(f"  ↳ New best val-acc {best_acc:.3f} → saved to {save_path}")
-        else:
-            epochs_no_improve += 1
-            if epochs_no_improve >= PATIENCE:
-                tqdm.write("Early stopping triggered.")
-                break
-
-    print(f"Training complete. Best validation accuracy: {best_acc:.3f}")
-
+            print(f"Training complete. Best validation accuracy: {best_acc:.3f}")
 
 
 def evaluate(model, val_loader, device):
@@ -161,27 +166,27 @@ def evaluate(model, val_loader, device):
     positive_labels = 0
     negative_labels = 0
 
-    total_loss      = 0.0
-    total_correct   = 0
-    total_samples   = 0
+    total_loss = 0.0
+    total_correct = 0
+    total_samples = 0
 
     all_preds, all_probs, all_labels = [], [], []
 
     with torch.no_grad():
         for x, y in val_loader:
-            x, y = x.to(device), y.to(device)         # y: [B, 2] one-hot
+            x, y = x.to(device), y.to(device)  # y: [B, 2] one-hot
             positive_labels += (y == 1).sum().item()  # count positive labels
             negative_labels += (y == 0).sum().item()  # count negative labels
 
-            logits = model(x)                                 # [B] or [B,1]
-            p_pos  = torch.sigmoid(logits).squeeze(dim=-1)     # [B]
-            p_neg  = 1.0 - p_pos
-            preds_batch = (p_pos >= 0.5).long()          # [B] – 0 or 1
+            logits = model(x)  # [B] or [B,1]
+            p_pos = torch.sigmoid(logits).squeeze(dim=-1)  # [B]
+            p_neg = 1.0 - p_pos
+            preds_batch = (p_pos >= 0.5).long()  # [B] – 0 or 1
             loss = criterion(logits, y.float())
-            batch_size        = x.size(0)
-            total_samples    += batch_size
-            total_loss       += loss.item() * batch_size
-            total_correct    += (preds_batch == y).sum().item()
+            batch_size = x.size(0)
+            total_samples += batch_size
+            total_loss += loss.item() * batch_size
+            total_correct += (preds_batch == y).sum().item()
 
             # store for later analysis
             all_preds.extend(preds_batch.cpu().numpy())
@@ -189,7 +194,7 @@ def evaluate(model, val_loader, device):
             all_labels.extend(y.cpu().numpy())
 
     avg_loss = total_loss / total_samples
-    avg_acc  = total_correct / total_samples          # 0 – 1 range
+    avg_acc = total_correct / total_samples  # 0 – 1 range
 
     # print(f"Positive labels: {positive_labels}, Negative labels: {negative_labels}")
     return (avg_loss,

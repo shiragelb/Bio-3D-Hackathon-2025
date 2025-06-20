@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 
+
 # ---------------------------------------------------------------------
 # NEW: helper that normal-initialises every Linear / Embedding weight
 # ---------------------------------------------------------------------
@@ -20,6 +21,7 @@ def _init_weights(module, mean: float = 0.0, std: float = 0.02):
     elif isinstance(module, nn.LayerNorm):
         nn.init.ones_(module.weight)
         nn.init.zeros_(module.bias)
+
 
 class SinusoidalPositionalEncoding(nn.Module):
     """
@@ -63,7 +65,7 @@ class PeriodicModuloEncoding(nn.Module):
             nn.Embedding(p, d_model) for p in periods
         ])
         self.periods = periods
-        
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seq_len = x.size(1)
         pos = torch.arange(seq_len, device=x.device)  # [seq_len]
@@ -176,9 +178,31 @@ class TransformerClassifier(nn.Module):
 
         return self.classifier(pooled).squeeze(1)  # Tensor [batch_size, num_classes]
 
+    def predict_on_test(self, x: torch.Tensor, W: int):
+        """
+        x: [batch, seq_len, embedding_dim]  – full-length test-set embeddings
+        W: sliding-window length
+        Returns  : list  (len == batch)
+                   each entry is a 1-D tensor of window-level probabilities
+                   shape [num_windows] where num_windows = max(seq_len-W+1, 0)
+        """
+        self.eval()  # inference mode
+        device = next(self.parameters()).device  # model’s device
+        x = x.to(device)
+        all_logits, all_probs = [], []
+        with torch.no_grad():
+            idx = 0
+            while idx + W <= x.size(1):
+                logit = self(x[:, idx:idx + W, :])  # [B, 1]
+                prob = torch.sigmoid(logit)  # [B, 1]
+                all_logits.append(logit)
+                all_probs.append(prob)
+                idx += 1
+        return all_logits, all_probs
+
 
 def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
-                               num_layers: int = 2, num_heads: int = 4, dropout: float = 0.5,
+                               num_layers: int = 1, num_heads: int = 2, dropout: float = 0.6,
                                positional_encoding: str = "sinusoidal", ) -> TransformerClassifier:
     """
     Creates a Transformer classifier for NES classification.
@@ -201,6 +225,7 @@ def get_transformer_classifier(max_seq_len: int, esm_embedding_dim: int,
         pooling="cls",  # Use CLS token for pooling
         add_cls_token=True  # Add a CLS token to the input
     )
+
 
 def main():
     """ Example usage """
