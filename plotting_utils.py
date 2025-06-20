@@ -40,7 +40,7 @@ def preprocess_pipeline_output(df):
     return processed_df
 
 
-def plot_score_distribution(data_dict, score_column='positive_probability',
+def plot_score_distribution(data_dict, score_column='score',
                             output_path="score_distribution.png"):
     """
     Plots histograms of the score distributions from one or more processed DataFrames.
@@ -69,7 +69,7 @@ def plot_score_distribution(data_dict, score_column='positive_probability',
     print(f"Saved score distribution plot to {output_path}")
 
 
-def plot_roc_curve(df, score_column='positive_probability',
+def plot_roc_curve(df, score_column='score',
                    label_column='labels', output_path="roc_curve.png"):
     """
     Generates and plots a ROC curve from a processed DataFrame.
@@ -106,7 +106,7 @@ def plot_roc_curve(df, score_column='positive_probability',
 
 
 def plot_score_boxplot(df, group_column='labels',
-                       score_column='positive_probability',
+                       score_column='score',
                        output_path="boxplot.png"):
     """
     Generates a box plot comparing score distributions, grouped by a column.
