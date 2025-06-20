@@ -1,17 +1,17 @@
-from pathlib import Path
-
+import os
 import numpy as np
 import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
+from tqdm import tqdm
 
 from Ex4_files.clustering import kmeans_clustering, tsne_dim_reduction
 from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
 from Ex4_files.plot import plot_2dim_reduction
-from transformer_NES_classifier import TransformerClassifier, get_transformer_classifier
+from create_data import create_data
+from transformer_NES_classifier import get_transformer_classifier
 from train_model import data_to_loaders, train, evaluate
-
-import random
+from create_data import extract_embeddings
 
 
 def create_dataset_from_csvs(pos_csv, neg_csv, output_csv_path):
@@ -32,96 +32,35 @@ def create_dataset_from_csvs(pos_csv, neg_csv, output_csv_path):
     return output_csv_path
 
 
-def extract_embeddings(csv_path, embedding_size=320, embedding_layer=6, embedding_path: str = "embeddings.pt"):
-    if Path(embedding_path).exists():
-        print("Loading embeddings from", embedding_path)
-        embeddings_data = torch.load(embedding_path, weights_only=False)
-        return embeddings_data['nes_embeddings'], embeddings_data['labels'], embeddings_data['df'], embeddings_data[
-            'device']
-
-    print("Extracting embeddings from", csv_path)
-    df = pd.read_csv(csv_path)
-    # df.drop(columns=['name', 'Unnamed: 6'], inplace=True)
-    pep_tuples = list(zip(df["uniprotID"], df["full sequence"]))
-
-    esm_model, alphabet, batch_converter, device = get_esm_model(embedding_size=embedding_size)
-
-    nes_embeddings = []
-    embed_batch_size = 8  # Adjust batch size, according to your GPU memory. 6GB VRam appears to handle 8.
-    total = len(pep_tuples)
-    current = 0
-    bad_labels = []
-    while current < total:
-        if current + embed_batch_size > total:  # Last batch may be smaller
-            embed_batch_size = total - current
-        print(f"Processing embedding {current + embed_batch_size}/{total}...")
-        batch = pep_tuples[current:current + embed_batch_size]
-
-        # Get embeddings for the current batch
-        batch_embeddings = get_esm_embeddings(
-            batch,
-            esm_model,
-            alphabet,
-            batch_converter,
-            device,
-            embedding_layer=embedding_layer,
-            sequence_embedding=False
-        )
-
-        for i, emb in enumerate(batch_embeddings):
-            i = i + current
-            start = df.iloc[i]["start#"]
-            try:
-                if df.iloc[i]["label"] == 1:
-                    length = len(df.iloc[i]["NES sequence"])
-                else:
-                    length = len(df.iloc[i]["NOT NES"])
-                nes_emb = emb[start:start + length]
-                nes_embeddings.append(torch.tensor(nes_emb, dtype=torch.float32))
-            except TypeError:
-                print("error with sequence at index", i)
-                bad_labels.append(i)
-
-        current += embed_batch_size
-
-    df.drop(index=bad_labels, inplace=True)  # drop rows with bad labels
-    # convert labels to tensor of shape (N, 2):
-    labels = torch.tensor(df["label"].values, dtype=torch.float32)
-    torch.save({
-        'nes_embeddings': nes_embeddings,
-        'labels': labels,
-        'df': df,
-        'device': device
-    }, embedding_path)
-    return nes_embeddings, labels, df, device
-
-
 def process_and_train(train_loader, val_loader, max_seq_len, emb_dim, device):
     model = get_transformer_classifier(
         max_seq_len=max_seq_len,
         esm_embedding_dim=emb_dim,
     ).to(device)
 
-    print("Evaluating model before training...")
-    val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
-    print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
-    print("Avg probability given :", probabilities.mean().item())
+    if val_loader:
+        print("Evaluating model before training...")
+        val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
+        print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
+        print("Avg probability given :", probabilities.mean().item())
 
-    train(model, train_loader, val_loader, device)
+    os.makedirs("models", exist_ok=True)
+    train(model, train_loader, val_loader, device, save_path="models/T_classifier.pt")
     print("\nEvaluating model post training...")
-    val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
-    print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
-    print("Avg probability given :", probabilities.mean().item())
-    # Calculating false positive and false negative rates:
-    tp = np.sum((preds == 1) & (labels == 1))   # true positives count
-    tn = np.sum((preds == 0) & (labels == 0))   # true negatives count
-    fp = np.sum((preds == 1) & (labels == 0))   # false positives count
-    fn = np.sum((preds == 0) & (labels == 1))   # false negatives count
-    # Now calculate rates:
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-    fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
-    print(f"False Positive Rate (FPR): {fpr:.3%}")
-    print(f"False Negative Rate (FNR): {fnr:.3%}")
+    if val_loader:
+        val_loss, val_acc, preds, probabilities, labels = evaluate(model, val_loader, device)
+        print("Validation Loss:", val_loss, "Validation Accuracy:", val_acc)
+        print("Avg probability given :", probabilities.mean().item())
+        # Calculating false positive and false negative rates:
+        tp = np.sum((preds == 1) & (labels == 1))  # true positives count
+        tn = np.sum((preds == 0) & (labels == 0))  # true negatives count
+        fp = np.sum((preds == 1) & (labels == 0))  # false positives count
+        fn = np.sum((preds == 0) & (labels == 1))  # false negatives count
+        # Now calculate rates:
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+        print(f"False Positive Rate (FPR): {fpr:.3%}")
+        print(f"False Negative Rate (FNR): {fnr:.3%}")
     return model
 
 
@@ -137,13 +76,13 @@ def predict(model, nes_embeddings):
     return logits, probabilities, predictions
 
 
-def save_predictions_to_csv(logits, predictions, df, output_csv_path):
-    logits_str = [str(list(logit.detach().cpu().numpy())) for logit in logits]
+def save_predictions_to_csv(probabilities, predictions, labels, output_csv_path):
+    probs_str = [str(p) for p in probabilities]
     output_df = pd.DataFrame({
-        "uniprotID": df["uniprotID"].tolist(),
-        "logits": logits_str,
-        "predictions": predictions.tolist(),
-        "labels": df["label"].tolist()
+        # "uniprotID": df["uniprotID"].tolist(),
+        "logits": probs_str,
+        "predictions": predictions,
+        "labels": labels.tolist()
     })
     output_df.to_csv(output_csv_path, index=False)
 
@@ -156,6 +95,69 @@ def plot_embeds_in_2d(embeds, labels):
     print("Plotting 2D dimensionality reduction by true labels and by K-means clustering")
     plot_2dim_reduction(coords_2d, [["N", "P"][i] for i in labels], out_file_path="2d_true_labels.png")
     plot_2dim_reduction(coords_2d, k_means_labels, out_file_path="2d_k_means.png")
+
+
+def calc_test_prediction(predictions, labels):
+    prediction_aggregated = torch.max(predictions, dim=1)[0]  # Get the max probability for each sample
+
+
+def main_new():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    output_predictions_csv = "model_output.csv"
+
+    # 1. Get embeddings and labels for training and test sets
+    train_embeds, train_labels, test_embeds, test_labels = create_data()
+    pos_count, neg_count = 0, 0
+    for label in train_labels:
+        if label == 0:
+            neg_count += 1
+        else:
+            pos_count += 1
+    print(f"Train set contains {pos_count} positive labels and {neg_count} negative labels.")
+
+    # 2. Train model
+    train_loader = data_to_loaders(train_embeds, train_labels, train_fraction=1)
+    window_size = train_embeds.size(1)
+    model = process_and_train(train_loader, val_loader=None, device=device,
+                              max_seq_len=window_size, emb_dim=train_embeds.size(2))
+
+    # 3. Run model on test set
+    print("Running model on test set...")
+    pos_count, neg_count = 0, 0
+    for label in test_labels:
+        if label == 0:
+            neg_count += 1
+        else:
+            pos_count += 1
+    print(f"Test set contains {pos_count} positive labels and {neg_count} negative labels.")
+    test_pred_probs = []
+    test_embeds, test_labels = test_embeds, test_labels
+    for embed in tqdm(test_embeds):
+        embed = embed.unsqueeze(0)  # Add batch dim
+        logits, probs = model.predict_on_test(embed, W=window_size)
+        logits, probs = torch.tensor(logits), torch.tensor(probs)
+        prob_aggregated = torch.max(probs)  # Get the max probability for each sample
+        test_pred_probs.append(prob_aggregated)
+
+    threshold = 0.5
+    predictions = np.array([1 if prob >= threshold else 0 for prob in test_pred_probs])
+    save_predictions_to_csv(test_pred_probs, predictions, test_labels, output_predictions_csv)
+
+    print("Training and testing complete. Predictions saved to", output_predictions_csv)
+    test_labels = np.array(test_labels)
+    acc = np.mean(predictions == test_labels)
+    print("Test acc: ", acc)
+    # TODO - calculate acc for only positives (label == 1)
+    pos_mask = test_labels == 1  # positives
+    pos_acc = (predictions[pos_mask] == 1).mean() if pos_mask.any() else float("nan")
+    print("Fraction of samples predicted as positive: ", (predictions == 1).sum() / len(test_labels))
+    print("Acc of positive samples: ", pos_acc)
+
+    # TODO - calculate acc for only negative (label == 0)
+    neg_mask = test_labels == 0  # negatives
+    neg_acc = (predictions[neg_mask] == 0).mean() if neg_mask.any() else float("nan")
+    print("Fraction of samples predicted as negative: ", (predictions == 0).sum() / len(test_labels))
+    print("Acc of negative samples: ", neg_acc)
 
 
 def main():
@@ -183,14 +185,15 @@ def main():
     # 4. Extract embeddings for the test set
     test_embeddings, test_labels, test_df, _ = extract_embeddings(test_csv_path, embedding_path="test_embeddings.pt")
 
-    # 5. Run the trained model on test embeddings 
-    logits, probabilities, predictions = predict(model, test_embeddings)
-
-    # 6. saves the results in a csv file
-    save_predictions_to_csv(logits, predictions, test_df, output_predictions_csv)
+    # 5. Run the trained model on test embeddings
+    W = -1  # Window size we trained on
+    probs = model.predict_on_test(test_embeddings, W=W)
+    threshold = 0.5
+    predictions = [1 if prob >= threshold else 0 for prob in probs]
+    save_predictions_to_csv(probs, predictions, test_df, output_predictions_csv)
 
     print("Training and testing complete. Predictions saved to", output_predictions_csv)
 
 
 if __name__ == "__main__":
-    main()
+    main_new()
