@@ -3,15 +3,12 @@ import numpy as np
 import pandas as pd, requests
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import WeightedRandomSampler
-
 from Ex4_files.clustering import tsne_dim_reduction, kmeans_clustering
 from Ex4_files.plot import plot_2dim_reduction
 from pipeline import extract_embeddings, process_and_train
 from train_model import data_to_loaders
 
 rng_ = np.random.default_rng(42)
-
 
 def predict_val_only(model, val_loader, threshold: float = 0.5):
     """
@@ -121,9 +118,7 @@ def create_neg_csv() -> str:
         .apply(sample_20mer_and_start)  # -> Series of tuples
         .apply(pd.Series)  # -> two separate columns
     )
-    df = df.dropna(subset=["full sequence"])  # Drop rows with no sequence
-    # Create label, which is always 0, for all rows:
-    df["label"] = 0  # 0 for negative examples
+    df["label"] = 0
 
     # draw a random subsequence of len 20 that still fits inside the sequence.
     df.to_csv(neg_csv_path_new, index=False)
@@ -167,7 +162,7 @@ def pad_first(seqs, target_len: int = 20, pad_value: int | float = 0):
 
 def get_embeds(pos_csv_path, neg_csv_path):
     pos_embeds, pos_labels, _, _ = extract_embeddings(pos_csv_path, embedding_path="train_embeddings.pt")
-    neg_embeds, neg_labels, _, device = extract_embeddings(neg_csv_path,
+    neg_embeds, neg_labels, _, _ = extract_embeddings(neg_csv_path,
                                                            embedding_path="embeddings/neg_for_classification.pt")
     pad_first(pos_embeds, target_len=20)
     pos_embeds = pad_sequence(pos_embeds, batch_first=True)
@@ -177,7 +172,6 @@ def get_embeds(pos_csv_path, neg_csv_path):
 
 
 def classify_difficulty():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     pos_csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"
     neg_csv_path = create_neg_csv()  # Create a negative CSV file with random subsequences
     os.makedirs("embeddings", exist_ok=True)
