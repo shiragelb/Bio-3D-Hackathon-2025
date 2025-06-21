@@ -230,9 +230,11 @@ def extract_test_embeddings(test_csv_path: str, embedding_path: str):
         data = torch.load(embedding_path, weights_only=False)
         embeddings = data['embeddings']
         labels = data['labels']
+        ids = data["uniprotID"]
+        sequences = data["full sequence"]
         df = data['df']
         device = data['device']
-        return embeddings, labels
+        return embeddings, labels, ids, sequences
     print(f"Extracting test embeddings from {test_csv_path} to {embedding_path}...")
     df = pd.read_csv(test_csv_path)
     pep_tuples = list(zip(df["uniprotID"], df["full sequence"]))
@@ -265,15 +267,17 @@ def extract_test_embeddings(test_csv_path: str, embedding_path: str):
 
     labels = torch.tensor(df["label"].values, dtype=torch.float32)
     ids = df["uniprotID"].values
+    sequences = df["full sequence"].values
     torch.save({
         'embeddings': embeddings,
         'labels': labels,
         'uniprotIDs': ids,
+        "full sequence":sequences,
         'df': df,
         'device': device
     }, embedding_path)
     print("Test embeddings created: ", embedding_path)
-    return embeddings, labels
+    return embeddings, labels, ids, sequences
 
 
 def create_NESdb_csv(pos_train__path: str, out_path: str):
@@ -301,10 +305,10 @@ def create_data():
     train_embeds, train_labels = extract_train_embeddings(full_train_csv,
                                                           embedding_path=train_path)
     test_path = f"embeddings/full_test_embeddings_{EMBED_SIZE}_{EMBED_LAYER}.pt"
-    test_embeds, test_labels = extract_test_embeddings(full_test_csv,
+    test_embeds, test_labels, test_ids, test_sequences = extract_test_embeddings(full_test_csv,
                                                        embedding_path=test_path)
 
-    return train_embeds, train_labels, test_embeds, test_labels
+    return train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences
 
 
 if __name__ == '__main__':
