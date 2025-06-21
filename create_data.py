@@ -217,13 +217,10 @@ def combine_csvs(csvs_list: list[str], out_path: str):
 
 
 def extract_train_embeddings(train_csv_path, embedding_path):
-    print(f"Extracting train embeddings from {train_csv_path} to {embedding_path}...")
-
     embeds, labels, _, _ = extract_embeddings(train_csv_path, embedding_path=embedding_path,
                                               embedding_size=EMBED_SIZE, embedding_layer=EMBED_LAYER)
     # Look for the maximum length of the sequences in the dataset, across all embeddings:
     embeds = pad_sequence(embeds, batch_first=True)
-    print("Train embeddings created: ", embedding_path)
     return embeds, labels
 
 
@@ -267,9 +264,11 @@ def extract_test_embeddings(test_csv_path: str, embedding_path: str):
         current += embed_batch_size
 
     labels = torch.tensor(df["label"].values, dtype=torch.float32)
+    ids = df["uniprotID"].values
     torch.save({
         'embeddings': embeddings,
         'labels': labels,
+        'uniprotIDs': ids,
         'df': df,
         'device': device
     }, embedding_path)
