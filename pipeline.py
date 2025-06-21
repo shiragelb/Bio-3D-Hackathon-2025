@@ -87,7 +87,7 @@ def predict(model, nes_embeddings):
     return logits, probabilities, predictions
 
 
-def save_predictions_to_csv(scores, predictions, labels, output_csv_path):
+def save_predictions_to_csv(scores, predictions, labels, test_ids, test_sequences, output_csv_path):
     """
     Scores are between 0 and 1.
     The predictions are based on a threshold of score>=0.5 == positive prediction, else negative.
@@ -97,7 +97,9 @@ def save_predictions_to_csv(scores, predictions, labels, output_csv_path):
         # "uniprotID": df["uniprotID"].tolist(),
         "score": scores_str,
         "predictions (threshold 0.5)": predictions,
-        "labels": labels.tolist()
+        "labels": labels.tolist(),
+        "uniprotID": test_ids,
+        "sequence": test_sequences
     })
     output_df.to_csv(output_csv_path, index=False)
 
@@ -115,7 +117,8 @@ def plot_embeds_in_2d(embeds, labels):
 def calc_test_prediction(predictions, labels):
     prediction_aggregated = torch.max(predictions, dim=1)[0]  # Get the max probability for each sample
 
-def set_seeds(seed:int=42):
+
+def set_seeds(seed: int = 42):
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -131,7 +134,7 @@ def main():
     output_predictions_csv = "model_output.csv"
 
     # 1. Get embeddings and labels for training and test sets
-    train_embeds, train_labels, test_embeds, test_labels = create_data()
+    train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences = create_data()
     window_size = train_embeds.size(1)
     embed_dim = train_embeds.size(2)
 
@@ -153,7 +156,7 @@ def main():
         saved = torch.load(model_savepath)
         state_dict = saved["model_state_dict"]
         model.load_state_dict(state_dict)
-    else: # Train
+    else:  # Train
         model = get_model(model_type=model_type, max_seq_len=window_size, emb_dim=embed_dim, device=device)
         model = process_and_train(model=model, train_loader=train_loader, val_loader=None, device=device)
         # Save model:
@@ -178,7 +181,6 @@ def main():
             pos_count += 1
     print(f"Test set contains {pos_count} positive labels and {neg_count} negative labels.")
     test_pred_scores = []
-    test_embeds, test_labels = test_embeds, test_labels
     for embed in tqdm(test_embeds):
         embed = embed.unsqueeze(0)  # Add batch dim
         logits, score = model.predict_on_test(embed, W=window_size)
@@ -188,7 +190,8 @@ def main():
     test_pred_scores = [t.item() for t in test_pred_scores]
     threshold = 0.5
     predictions = np.array([1 if prob >= threshold else 0 for prob in test_pred_scores])
-    save_predictions_to_csv(test_pred_scores, predictions, test_labels, output_predictions_csv)
+    save_predictions_to_csv(test_pred_scores, predictions, test_labels, test_ids, test_sequences,
+                            output_predictions_csv)
 
     print("Training and testing complete. Predictions saved to", output_predictions_csv)
     test_labels = np.array(test_labels)
@@ -203,6 +206,7 @@ def main():
     neg_acc = (predictions[neg_mask] == 0).mean() if neg_mask.any() else float("nan")
     print("Fraction of samples predicted as negative: ", (predictions == 0).sum() / len(test_labels))
     print("Acc of negative samples: ", neg_acc)
+
 
 if __name__ == "__main__":
     main()
