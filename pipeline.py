@@ -144,11 +144,6 @@ def plot_embeds_in_2d(embeds, labels, plot_id: str):
                         out_file_path=f"plots/2d_true_labels_{plot_id}.png")
     plot_2dim_reduction(coords_2d, k_means_labels, out_file_path=f"plots/2d_k_means_{plot_id}.png")
 
-
-def calc_test_prediction(predictions, labels):
-    prediction_aggregated = torch.max(predictions, dim=1)[0]  # Get the max probability for each sample
-
-
 def set_seeds(seed: int = 42):
     torch.manual_seed(seed)
     random.seed(seed)
