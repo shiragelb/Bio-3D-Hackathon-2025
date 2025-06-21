@@ -226,7 +226,7 @@ def extract_train_embeddings(train_csv_path, embedding_path):
 
 def extract_test_embeddings(test_csv_path: str, embedding_path: str):
     if os.path.exists(embedding_path):
-        print(f"Test embeddings already exist at {embedding_path}.")
+        print(f"Loading test embeddings from {embedding_path}.")
         data = torch.load(embedding_path, weights_only=False)
         embeddings = data['embeddings']
         labels = data['labels']
@@ -271,8 +271,8 @@ def extract_test_embeddings(test_csv_path: str, embedding_path: str):
     torch.save({
         'embeddings': embeddings,
         'labels': labels,
-        'uniprotIDs': ids,
-        "full sequence":sequences,
+        'uniprotID': ids,
+        "full sequence": sequences,
         'df': df,
         'device': device
     }, embedding_path)
@@ -306,7 +306,7 @@ def create_data():
                                                           embedding_path=train_path)
     test_path = f"embeddings/full_test_embeddings_{EMBED_SIZE}_{EMBED_LAYER}.pt"
     test_embeds, test_labels, test_ids, test_sequences = extract_test_embeddings(full_test_csv,
-                                                       embedding_path=test_path)
+                                                                                 embedding_path=test_path)
 
     return train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences
 
