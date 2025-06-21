@@ -3,11 +3,11 @@ import random
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib import pyplot as plt
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
 from Ex4_files.clustering import kmeans_clustering, tsne_dim_reduction
-from Ex4_files.plot import plot_2dim_reduction
 from create_data import create_data
 from nets.FF_classifier import get_FF_classifier
 from nets.transformer_NES_classifier import get_transformer_classifier
@@ -94,7 +94,6 @@ def save_predictions_to_csv(scores, predictions, labels, test_ids, test_sequence
     """
     scores_str = [str(s) for s in scores]
     output_df = pd.DataFrame({
-        # "uniprotID": df["uniprotID"].tolist(),
         "score": scores_str,
         "predictions (threshold 0.5)": predictions,
         "labels": labels.tolist(),
@@ -104,14 +103,46 @@ def save_predictions_to_csv(scores, predictions, labels, test_ids, test_sequence
     output_df.to_csv(output_csv_path, index=False)
 
 
-def plot_embeds_in_2d(embeds, labels):
+def plot_2dim_reduction(lower_dim_coords, labels, out_file_path):
+    """
+    Scatter plot 2D coordinates with points colored by `labels`.
+    :param lower_dim_coords: 2D coordinates
+    :param labels: Class or cluster labels used to color points.
+    :param out_file_path: The path for the output png
+    """
+
+    unique_labels = np.unique(labels)
+    labels = np.array(labels)
+    lower_dim_coords = np.array(lower_dim_coords)
+
+    plt.figure(figsize=(6, 5))
+    for lab in unique_labels:
+        idx = (labels == lab)
+        plt.scatter(
+            lower_dim_coords[idx, 0],
+            lower_dim_coords[idx, 1],
+            label=str(lab),
+        )
+
+    plt.xlabel("DIM-1")
+    plt.ylabel("DIM-2")
+    plt.legend(title="Label", loc="best")
+    plt.tight_layout()
+
+    plt.savefig(out_file_path)
+    plt.close()
+
+
+def plot_embeds_in_2d(embeds, labels, plot_id: str):
+    labels = np.array(labels,dtype=int)
     train_np = np.array([emb.mean(0) for emb in embeds])
+    print(f"Plotting 2D dimensionality reduction of {plot_id} by true labels and by K-means clustering")
     k_means_labels = kmeans_clustering(train_np, k=2)
     coords_2d = tsne_dim_reduction(train_np, dim=2)
-
-    print("Plotting 2D dimensionality reduction by true labels and by K-means clustering")
-    plot_2dim_reduction(coords_2d, [["N", "P"][i] for i in labels], out_file_path="2d_true_labels.png")
-    plot_2dim_reduction(coords_2d, k_means_labels, out_file_path="2d_k_means.png")
+    os.makedirs("plots", exist_ok=True)
+    plot_2dim_reduction(coords_2d, [["N", "P"][i] for i in labels],
+                        out_file_path=f"plots/2d_true_labels_{plot_id}.png")
+    plot_2dim_reduction(coords_2d, k_means_labels, out_file_path=f"plots/2d_k_means_{plot_id}.png")
 
 
 def calc_test_prediction(predictions, labels):
@@ -162,6 +193,8 @@ def main():
 
     # 1. Get embeddings and labels for training and test sets
     train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences = create_data()
+    plot_embeds_in_2d(train_embeds, train_labels, plot_id="train-embeds")
+    plot_embeds_in_2d(test_embeds, test_labels, plot_id="test-embeds")
     window_size = train_embeds.size(1)
     embed_dim = train_embeds.size(2)
     pos_count, neg_count = 0, 0
