@@ -125,34 +125,15 @@ def set_seeds(seed: int = 42):
     torch.backends.cudnn.deterministic = True
 
 
-def main():
-    set_seeds()
-
-    model_type = ["FF_classifier", "transformer_classifier"][1]
-    load_prepare_model = [True, False][0]
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    output_predictions_csv = "model_output.csv"
-
-    # 1. Get embeddings and labels for training and test sets
-    train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences = create_data()
-    window_size = train_embeds.size(1)
-    embed_dim = train_embeds.size(2)
-
-    model_identifier = f"{model_type}_w-{window_size}_emb-{embed_dim}"
-    model_savepath = f"models/{model_identifier}.pt"
-
-    pos_count, neg_count = 0, 0
-    for label in train_labels:
-        if label == 0:
-            neg_count += 1
-        else:
-            pos_count += 1
-    print(f"Train set contains {pos_count} positive labels and {neg_count} negative labels.")
-
-    # 2. Train model
+def get_trained_model(model_type, train_embeds, train_labels, window_size, embed_dim, device,
+                      load_prepared_model, model_savepath):
+    """
+    If a trained model already exists, this function will return it.
+    Otherwise, it trains a new model and returns it.
+    """
     train_loader = data_to_loaders(train_embeds, train_labels, train_fraction=1)
     model = get_model(model_type=model_type, max_seq_len=window_size, emb_dim=embed_dim, device=device)
-    if load_prepare_model:
+    if load_prepared_model:
         saved = torch.load(model_savepath)
         state_dict = saved["model_state_dict"]
         model.load_state_dict(state_dict)
@@ -169,9 +150,36 @@ def main():
             },
             model_savepath
         )
+    return model
 
-    output_predictions_csv = f"test_output_{model_identifier}.csv"
+
+def main():
+    set_seeds()
+
+    model_type = ["FF_classifier", "transformer_classifier"][1]
+    load_prepared_model = [True, False][0]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 1. Get embeddings and labels for training and test sets
+    train_embeds, train_labels, test_embeds, test_labels, test_ids, test_sequences = create_data()
+    window_size = train_embeds.size(1)
+    embed_dim = train_embeds.size(2)
+    pos_count, neg_count = 0, 0
+    for label in train_labels:
+        if label == 0:
+            neg_count += 1
+        else:
+            pos_count += 1
+    print(f"Train set contains {pos_count} positive labels and {neg_count} negative labels.")
+
+    # 2. Get trained model or load a trained one
+    model_identifier = f"{model_type}_w-{window_size}_emb-{embed_dim}"
+    model_savepath = f"models/{model_identifier}.pt"
+    model = get_trained_model(model_type, train_embeds, train_labels, window_size, embed_dim, device,
+                              load_prepared_model, model_savepath)
+
     # 3. Run model on test set
+    output_predictions_csv = f"test_output_{model_identifier}.csv"
     print("Running model on test set...")
     pos_count, neg_count = 0, 0
     for label in test_labels:
