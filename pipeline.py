@@ -8,11 +8,10 @@ from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
 from Ex4_files.clustering import kmeans_clustering, tsne_dim_reduction
-from create_data import create_data
+from scripts.create_data import create_data
 from nets.FF_classifier import get_FF_classifier
 from nets.transformer_NES_classifier import get_transformer_classifier
 from train_model import data_to_loaders, train, evaluate
-from create_data import extract_embeddings
 
 
 def create_dataset_from_csvs(pos_csv, neg_csv, output_csv_path):

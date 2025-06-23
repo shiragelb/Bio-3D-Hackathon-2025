@@ -170,7 +170,7 @@ def generate_negative_csv_from_nes(nes_csv_path, output_csv_path=None, seed=42):
 def main():
     # url = "http://prodata.swmed.edu/nes_pattern_location/"
     # fetch_nes_table_to_csv(url)
-    generate_negative_csv_from_nes("nes_output.csv")
+    generate_negative_csv_from_nes("../output_data/nes_output.csv")
 
 if __name__ == "__main__":
     main()

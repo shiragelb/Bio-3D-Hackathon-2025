@@ -4,8 +4,9 @@ import seaborn as sns
 from scipy.stats import spearmanr, pearsonr
 
 # === Step 1: Load data ===
-deep_prot_df = pd.read_csv("input_sequences/deep_proteomics.csv")
-model_output_df = pd.read_csv("test_output_transformer_classifier_w-20_emb-2560.csv")
+deep_prot_df = pd.read_csv("../input_sequences/deep_proteomics.csv")
+model_output_df = pd.read_csv(
+    "../output_data/test_output_transformer_classifier_w-20_emb-2560.csv")
 
 # === Step 2: Merge on uniprotID ===
 merged_df = pd.merge(model_output_df, deep_prot_df, on="uniprotID", how="inner")

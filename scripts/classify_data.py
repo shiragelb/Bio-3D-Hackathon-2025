@@ -90,7 +90,7 @@ def sample_20mer_and_start(seq: str, win: int = 20, rng=rng_):
 
 
 def create_neg_csv() -> str:
-    neg_csv_path = "DB_Tanya/deep_proteomics_data_3.csv"
+    neg_csv_path = "../DB_Tanya/deep_proteomics_data_3.csv"
     neg_csv_path_new = "input_sequences/negative_nes_proteomics3.csv"
 
     if os.path.exists(neg_csv_path_new):
@@ -172,7 +172,7 @@ def get_embeds(pos_csv_path, neg_csv_path):
 
 
 def classify_difficulty():
-    pos_csv_path = "input_sequences/NESdb_NESpositive_sequences.csv"
+    pos_csv_path = "../input_sequences/NESdb_NESpositive_sequences.csv"
     neg_csv_path = create_neg_csv()  # Create a negative CSV file with random subsequences
     os.makedirs("embeddings", exist_ok=True)
     pos_embeds, pos_labels, neg_embeds, neg_labels = get_embeds(pos_csv_path, neg_csv_path)

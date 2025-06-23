@@ -100,7 +100,7 @@ def pad_first(seqs, target_len: int = 20, pad_value: int | float = 0):
 
 def create_neg_proteom_csv() -> tuple[str, str]:
     print("Creating negative proteomics CSV files...")
-    neg_csv_path = "DB_Tanya/deep_proteomics_data_3.csv"
+    neg_csv_path = "../DB_Tanya/deep_proteomics_data_3.csv"
     neg_train_csv = "input_sequences/negative_nes_proteomics3_train.csv"
     neg_test_csv = "input_sequences/negative_nes_proteomics3_test.csv"
 
@@ -177,7 +177,7 @@ def create_pos_proteom_csv():
     Note that since we don't have the specific NES sequence, this data is only viable for testing.
     """
     print("Creating positive proteomics CSV files...")
-    csv_path = "DB_Tanya/deep_proteomics_data_3.csv"
+    csv_path = "../DB_Tanya/deep_proteomics_data_3.csv"
     pos_test_csv = "input_sequences/pos_test_proteomics3.csv"
     if os.path.exists(pos_test_csv):
         return pos_test_csv
@@ -289,7 +289,7 @@ def create_NESdb_csv(pos_train__path: str, out_path: str):
 
 def create_data():
     os.makedirs("input_sequences_processed", exist_ok=True)
-    pos_train_path = "input_sequences/NESdb_NESpositive_sequences.csv"
+    pos_train_path = "../input_sequences/NESdb_NESpositive_sequences.csv"
     pos_csv_train_path = create_NESdb_csv(pos_train_path, out_path="input_sequences_processed/NESdb_pos_train_set.csv")
     neg_csv_train_path, neg_csv_test_path = create_neg_proteom_csv()
     pos_csv_test_path = create_pos_proteom_csv()
