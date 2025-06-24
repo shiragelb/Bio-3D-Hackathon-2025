@@ -2,17 +2,19 @@ import numpy as np
 import pandas as pd
 import requests
 import os
-
 import torch
 from torch.nn.utils.rnn import pad_sequence
+from ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
+from src.params import SEED, EMBED_LAYER, EMBED_SIZE
 
-from Ex4_files.esm_embeddings import get_esm_model, get_esm_embeddings
+rng_ = np.random.default_rng(SEED)
 
-rng_ = np.random.default_rng(42)
-
-EMBED_SIZE = 2560
-EMBED_LAYER = 9
-
+# ESM_EMBED_SIZE_TO_LAYER = {320: 6,  # which transformer layer to take for the embedding
+#                            480: 12,
+#                            640: 30,
+#                            1280: 33,
+#                            2560: max 36, 9 was better in ex4
+#                            5120: 48}
 
 def extract_embeddings(csv_path, embedding_path: str, embedding_size=320, embedding_layer=6):
     if os.path.exists(embedding_path):
@@ -100,9 +102,9 @@ def pad_first(seqs, target_len: int = 20, pad_value: int | float = 0):
 
 def create_neg_proteom_csv() -> tuple[str, str]:
     print("Creating negative proteomics CSV files...")
-    neg_csv_path = "../DB_Tanya/deep_proteomics_data_3.csv"
-    neg_train_csv = "input_sequences/negative_nes_proteomics3_train.csv"
-    neg_test_csv = "input_sequences/negative_nes_proteomics3_test.csv"
+    neg_csv_path = "DB_Tanya/deep_proteomics_data_3.csv"
+    neg_train_csv = "input_sequences_processed/negative_nes_proteomics3_train.csv"
+    neg_test_csv = "input_sequences_processed/negative_nes_proteomics3_test.csv"
 
     if os.path.exists(neg_train_csv) and os.path.exists(neg_test_csv):
         return neg_train_csv, neg_test_csv
@@ -124,7 +126,7 @@ def create_neg_proteom_csv() -> tuple[str, str]:
         print("Warning: There are sequences in the dataset. ")
         raise ValueError("Duplicate sequences found in the dataset.")
     # Drop empty sequences:
-    df = df.dropna(subset=["full sequence"])
+    df.dropna(subset=["full sequence"], inplace=True)
     # Fetch random sub-sequence of length 20 and its start index:
     df[["NOT NES", "start#"]] = (
         df["full sequence"]
@@ -136,6 +138,7 @@ def create_neg_proteom_csv() -> tuple[str, str]:
     # Split the dataset into train and test sets:
     train_size = int(0.6 * len(df))
     train_df = df.iloc[:train_size]
+
     test_df = df.iloc[train_size:]
 
     train_df.to_csv(neg_train_csv, index=False)
@@ -177,8 +180,8 @@ def create_pos_proteom_csv():
     Note that since we don't have the specific NES sequence, this data is only viable for testing.
     """
     print("Creating positive proteomics CSV files...")
-    csv_path = "../DB_Tanya/deep_proteomics_data_3.csv"
-    pos_test_csv = "input_sequences/pos_test_proteomics3.csv"
+    csv_path = "DB_Tanya/deep_proteomics_data_3.csv"
+    pos_test_csv = "input_sequences_processed/pos_test_proteomics3.csv"
     if os.path.exists(pos_test_csv):
         return pos_test_csv
 
@@ -198,7 +201,7 @@ def create_pos_proteom_csv():
     # Fetch sequences for each UniProt ID, and add to a new column "sequence":
     df["full sequence"] = uids.apply(fetch_uniprot_fasta)
     # Drop empty sequences:
-    df = df.dropna(subset=["full sequence"])
+    df.dropna(subset=["full sequence"], inplace=True)
     df["label"] = 1
 
     # Split the dataset into train and test sets:
@@ -219,7 +222,7 @@ def combine_csvs(csvs_list: list[str], out_path: str):
 def extract_train_embeddings(train_csv_path, embedding_path):
     embeds, labels, _, _ = extract_embeddings(train_csv_path, embedding_path=embedding_path,
                                               embedding_size=EMBED_SIZE, embedding_layer=EMBED_LAYER)
-    # Look for the maximum length of the sequences in the dataset, across all embeddings:
+    # Pad all sequences to the same length
     embeds = pad_sequence(embeds, batch_first=True)
     return embeds, labels
 
@@ -287,14 +290,45 @@ def create_NESdb_csv(pos_train__path: str, out_path: str):
     return out_path
 
 
+def splice(seq: str, repl: str, start: int) -> str:
+    """Replace len(repl) characters of seq starting at start with repl."""
+    return seq[:start] + repl + seq[start + len(repl):]
+
+
+def extract_mutated_neg_training_data(csv_path: str, out_path: str):
+    df = pd.read_csv(csv_path)
+    df.rename(columns={"NES sequence": "NOT NES"}, inplace=True)
+    df.dropna(subset=["full sequence", "NOT NES"], inplace=True)
+
+    # Remove every row where the column "NES sequence" is empty or has non-alphabet characters
+    df = df[df["NOT NES"].str.match(r"^[A-Za-z]+$", na=False)]
+    # Remove rows where "start#" cannot be converted to an integer
+    numeric_mask = pd.to_numeric(df["start#"], errors="coerce").notna()
+    df = df[numeric_mask].copy()
+    df["start#"] = df["start#"].astype(int)
+
+    # Replace original sequence with the mutated sequence
+    df["full sequence"] = (
+        df[["full sequence", "NOT NES", "start#"]]
+        .apply(lambda r: splice(r["full sequence"], r["NOT NES"], int(r["start#"])), axis=1))
+
+    df.to_csv(out_path, index=False)
+    return out_path
+
+
 def create_data():
     os.makedirs("input_sequences_processed", exist_ok=True)
-    pos_train_path = "../input_sequences/NESdb_NESpositive_sequences.csv"
+    pos_train_path = "input_sequences/NESdb_NESpositive_sequences.csv"
     pos_csv_train_path = create_NESdb_csv(pos_train_path, out_path="input_sequences_processed/NESdb_pos_train_set.csv")
     neg_csv_train_path, neg_csv_test_path = create_neg_proteom_csv()
     pos_csv_test_path = create_pos_proteom_csv()
+    neg_mutated_csv_train_path = extract_mutated_neg_training_data(csv_path="input_sequences/nes_mutated_negatives.csv",
+                                                                   out_path="input_sequences_processed/mutated_neg_train_set.csv")
 
-    train_set = [neg_csv_train_path, pos_csv_train_path]
+    # train_set = [neg_csv_train_path, pos_csv_train_path]
+    train_set = [neg_mutated_csv_train_path, pos_csv_train_path]
+    # train_set = [neg_csv_train_path, neg_mutated_csv_train_path, pos_csv_train_path]
+
     test_set = [neg_csv_test_path, pos_csv_test_path]
 
     full_train_csv = combine_csvs(train_set, out_path="input_sequences_processed/full_train_set.csv")

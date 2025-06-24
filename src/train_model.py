@@ -2,9 +2,9 @@ import numpy as np
 import torch.nn
 from torch import optim, nn
 from torch.utils.data import DataLoader, random_split, TensorDataset
+from params import N_EPOCHS, LR, WEIGHT_DECAY
 from tqdm.auto import tqdm
 import torch
-
 
 def accuracy(logits: torch.Tensor, y):
     """Compute categorical accuracy."""
@@ -45,9 +45,6 @@ def data_to_loaders(x, y, train_fraction=0.8, sampler=None):
 
 def train(model, train_loader, val_loader, device, save_path=None):
     # ───────────────────────────── config ────────────────────────────────
-    N_EPOCHS = 10
-    LR = 1e-5
-    WEIGHT_DECAY = 1e-4
     PATIENCE = 99  # early-stopping patience (epochs)
 
     criterion = nn.BCEWithLogitsLoss()
@@ -105,12 +102,12 @@ def train(model, train_loader, val_loader, device, save_path=None):
         # print(f"Positive labels: {positive_labels}, Negative labels: {negative_labels}")
 
         # ---------- validation phase ----------
-        model.eval()
-        val_loss = 0.0
-        val_correct = 0
-        val_samples = 0
 
         if val_loader:
+            model.eval()
+            val_loss = 0.0
+            val_correct = 0
+            val_samples = 0
             with torch.no_grad():
                 for xb, yb in val_loader:
                     xb, yb = xb.to(device), yb.to(device)
@@ -135,16 +132,17 @@ def train(model, train_loader, val_loader, device, save_path=None):
                 f"Avg probability during training epoch: {np.mean(epoch_probs):.3f} | "
                 f"Variance of probabilities during training epoch: {np.var(epoch_probs):.3f}"
             )
-
-        tqdm.write(
-            f"Epoch {epoch:02d} | "
-            f"train loss/acc: {avg_train_loss:.4f}/{avg_train_acc:.3f} | "
-            f"Avg probability during training epoch: {np.mean(epoch_probs):.3f} | "
-            f"Variance of probabilities during training epoch: {np.var(epoch_probs):.3f}"
-        )
+        else:
+            tqdm.write(
+                f"Epoch {epoch:02d} | "
+                f"train loss/acc: {avg_train_loss:.4f}/{avg_train_acc:.3f} | "
+                f"Avg probability during training epoch: {np.mean(epoch_probs):.3f} | "
+                f"Variance of probabilities during training epoch: {np.var(epoch_probs):.3f}"
+            )
         if val_loader:
             # ----- early stopping & checkpoint -----
             if avg_val_acc > best_acc:
+                best_state_dict = model.state_dict()
                 best_acc = avg_val_acc
                 epochs_no_improve = 0
                 if save_path:
@@ -157,6 +155,9 @@ def train(model, train_loader, val_loader, device, save_path=None):
                     break
 
             print(f"Training complete. Best validation accuracy: {best_acc:.3f}")
+
+    if val_loader:
+        return best_state_dict
 
 
 def evaluate(model, val_loader, device):
